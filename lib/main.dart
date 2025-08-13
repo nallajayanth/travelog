@@ -1,0 +1,40 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+
+import 'screens/auth/login_screen.dart'; // you said you have this
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Supabase (using the values you provided)
+  await Supabase.initialize(
+    url: 'https://onnunvymuazaeoyoqpdz.supabase.co',
+    anonKey:
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9ubnVudnltdWF6YWVveW9xcGR6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ5ODAzMTIsImV4cCI6MjA3MDU1NjMxMn0.aOi09aZyxNRTGOZo6tAfAjb-VNNL9em481wei6JI3Zg',
+  );
+
+  // Initialize Hive and open the box (JSON map storage)
+  await Hive.initFlutter();
+  await Hive.openBox('entries');
+
+  runApp(const ProviderScope(child: MyApp()));
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'WanderLog',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+      ),
+      // If you have auth flow, keep LoginScreen; else go to HomeScreen
+      home: const LoginScreen(), // you mentioned you already made login
+    );
+  }
+}
