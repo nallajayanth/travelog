@@ -1,5 +1,3 @@
-
-
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -14,8 +12,6 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
   final supabase = Supabase.instance.client;
 
   void _goToHome() {
@@ -49,48 +45,28 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  Future<void> signIn() async {
-    try {
-      final res = await supabase.auth.signInWithPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
-      );
-      if (res.user != null) {
-        await _insertUserIfNotExists(res.user!);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("User Login Successfully!")),
-        );
-        _goToHome();
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}")));
-    }
-  }
-
   Future<void> signInWithGoogle() async {
     try {
       await supabase.auth.signInWithOAuth(
         OAuthProvider.google,
         redirectTo: 'io.supabase.flutter://login-callback/',
       );
-
-      supabase.auth.onAuthStateChange.listen((data) async {
-        final event = data.event;
-        final session = data.session;
-
-        if (event == AuthChangeEvent.signedIn && session != null) {
-          final user = session.user;
-          if (user != null) {
-            await _insertUserIfNotExists(user);
-            _goToHome();
-          }
-        }
-      });
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Google sign-in error: ${e.toString()}')),
+      );
+    }
+  }
+
+  Future<void> signInWithApple() async {
+    try {
+      await supabase.auth.signInWithOAuth(
+        OAuthProvider.apple,
+        redirectTo: 'io.supabase.flutter://login-callback/',
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Apple sign-in error: ${e.toString()}')),
       );
     }
   }
@@ -124,81 +100,161 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Login")),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              TextFormField(
-                controller: _emailController,
-                decoration: InputDecoration(
-                  labelText: "Email",
-                  hintText: "Enter Your Email Id",
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              TextFormField(
-                controller: _passwordController,
-                obscureText: true,
-                decoration: InputDecoration(
-                  labelText: "Password",
-                  hintText: "Enter Your Password",
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(onPressed: signIn, child: const Text("Login")),
-              const SizedBox(height: 20),
-              Text.rich(
-                TextSpan(
-                  text: 'Don\'t have an account? ',
-                  children: [
-                    TextSpan(
-                      text: 'Sign up',
-                      style: const TextStyle(
-                        color: Colors.blue,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      recognizer: TapGestureRecognizer()
-                        ..onTap = () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const RegistrationScreen(),
-                            ),
-                          );
-                        },
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text.rich(
-                TextSpan(
-                  text: 'Sign Up With Google ',
-                  children: [
-                    TextSpan(
-                      text: 'Click here',
-                      style: const TextStyle(
-                        color: Colors.blue,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      recognizer: TapGestureRecognizer()
-                        ..onTap = signInWithGoogle,
-                    ),
-                  ],
-                ),
-              ),
-            ],
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Background image (faint travel-themed background for enhanced UI)
+          Image.network(
+            'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&q=80',
+            fit: BoxFit.cover,
           ),
-        ),
+          // Overlay for readability
+          Container(
+            color: Colors.white.withOpacity(0.7),
+          ),
+          SafeArea(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text(
+                      'Welcome to Travlog',
+                      style: TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Capture your adventures and create lasting memories with our beautiful travel journal',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 18,
+                        color: Colors.black54,
+                      ),
+                    ),
+                    const SizedBox(height: 48),
+                    // Google Button
+                    GestureDetector(
+                      onTap: signInWithGoogle,
+                      child: Container(
+                        width: 300,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF4285F4), Color(0xFF34A853)],
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.grey.withOpacity(0.3),
+                              spreadRadius: 2,
+                              blurRadius: 8,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              'G',
+                              style: TextStyle(
+                                fontSize: 24,
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            SizedBox(width: 12),
+                            Text(
+                              'Continue with Google',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: Colors.white,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    // Apple Button
+                    GestureDetector(
+                      onTap: signInWithApple,
+                      child: Container(
+                        width: 300,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.black,
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.grey.withOpacity(0.3),
+                              spreadRadius: 2,
+                              blurRadius: 8,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.apple,
+                              color: Colors.white,
+                              size: 28,
+                            ),
+                            SizedBox(width: 12),
+                            Text(
+                              'Continue with Apple',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: Colors.white,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                    // Optional sign-up link (kept minimal to maintain functionality without disturbing core logic)
+                    Text.rich(
+                      TextSpan(
+                        text: 'Don\'t have an account? ',
+                        style: const TextStyle(color: Colors.black54),
+                        children: [
+                          TextSpan(
+                            text: 'Sign up',
+                            style: const TextStyle(
+                              color: Colors.blue,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            recognizer: TapGestureRecognizer()
+                              ..onTap = () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => const RegistrationScreen(),
+                                  ),
+                                );
+                              },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

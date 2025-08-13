@@ -1,14 +1,11 @@
+
 import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
 
 class SupabaseService {
   final SupabaseClient client = Supabase.instance.client;
   final String bucket = 'journal-photos';
-  final String clarifaiApiKey =
-      'YOUR_CLARIFAI_API_KEY'; // Replace or leave empty
 
   Future<String> uploadPhoto(File file) async {
     final uuid = const Uuid().v4();
@@ -29,59 +26,13 @@ class SupabaseService {
         print('Binary upload successful: $binaryResponse');
         return client.storage.from(bucket).getPublicUrl(path);
       } catch (binaryError) {
-        print(
-          'Binary upload failed: $binaryError - Check bucket policies/RLS in Supabase',
-        );
-        rethrow; // Propagate error
+        print('Binary upload failed: $binaryError - Check bucket policies/RLS');
+        rethrow;
       }
-    }
-  }
-
-  Future<List<String>> getTagsForImage(String imageUrl) async {
-    if (clarifaiApiKey == 'YOUR_CLARIFAI_API_KEY' || clarifaiApiKey.isEmpty) {
-      print('Clarifai key not set, skipping tags');
-      return [];
-    }
-    try {
-      final response = await http.post(
-        Uri.parse('https://api.clarifai.com/v2/models/general-v1.3/outputs'),
-        headers: {
-          'Authorization': 'Key $clarifaiApiKey',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({
-          'inputs': [
-            {
-              'data': {
-                'image': {'url': imageUrl},
-              },
-            },
-          ],
-        }),
-      );
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final concepts = data['outputs'][0]['data']['concepts'] as List;
-        return concepts.take(5).map((c) => c['name'] as String).toList();
-      } else {
-        print('Clarifai error: ${response.statusCode} ${response.body}');
-      }
-      return [];
-    } catch (e) {
-      print('Tagging error: $e');
-      return [];
     }
   }
 
   Future<Map<String, dynamic>?> insertEntry(Map<String, dynamic> entry) async {
-    final photos = entry['photos'] as List<String>? ?? [];
-    final allTags = <String>[];
-    for (final url in photos) {
-      final tags = await getTagsForImage(url);
-      allTags.addAll(tags);
-    }
-    entry['tags'] = allTags.toSet().toList().take(5).toList();
-
     try {
       final res = await client
           .from('journal_entries')
