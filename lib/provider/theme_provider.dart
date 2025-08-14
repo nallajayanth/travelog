@@ -1,3 +1,4 @@
+
 // lib/provider/theme_provider.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,13 +9,13 @@ final themeModeProvider = StateNotifierProvider<ThemeModeNotifier, ThemeMode>(
 );
 
 class ThemeModeNotifier extends StateNotifier<ThemeMode> {
-  ThemeModeNotifier() : super(ThemeMode.dark) {
+  ThemeModeNotifier() : super(ThemeMode.light) {
     _loadTheme();
   }
 
   Future<void> _loadTheme() async {
     final box = Hive.box('settings');
-    final isDark = box.get('darkMode', defaultValue: true); // Default to dark as per image
+    final isDark = box.get('darkMode', defaultValue: false); // Default to light
     state = isDark ? ThemeMode.dark : ThemeMode.light;
   }
 
@@ -24,29 +25,3 @@ class ThemeModeNotifier extends StateNotifier<ThemeMode> {
     await box.put('darkMode', isDark);
   }
 }
-
-// To integrate in main.dart (add this to your main MaterialApp):
-// final themeMode = ref.watch(themeModeProvider);
-// themeMode: themeMode,
-// theme: ThemeData(
-//   useMaterial3: true,
-//   colorScheme: ColorScheme.fromSeed(
-//     seedColor: Colors.blue,
-//     brightness: Brightness.light,
-//   ),
-//   cardTheme: CardTheme(
-//     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-//     elevation: 2,
-//   ),
-// ),
-// darkTheme: ThemeData(
-//   useMaterial3: true,
-//   colorScheme: ColorScheme.fromSeed(
-//     seedColor: Colors.blue,
-//     brightness: Brightness.dark,
-//   ),
-//   cardTheme: CardTheme(
-//     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-//     elevation: 2,
-//   ),
-// ),

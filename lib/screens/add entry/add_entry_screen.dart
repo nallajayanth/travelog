@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:geocoding/geocoding.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:travlog_app/provider/entries_provider.dart';
 import 'package:uuid/uuid.dart';
@@ -32,6 +31,7 @@ class _AddEntryScreenState extends ConsumerState<AddEntryScreen> {
   double? _latitude;
   double? _longitude;
   List<String> _existingPhotos = [];
+  late List<String> _displayPhotos;
 
   @override
   void initState() {
@@ -43,7 +43,9 @@ class _AddEntryScreenState extends ConsumerState<AddEntryScreen> {
           widget.entry!['date_time'] ?? DateTime.now().toIso8601String();
       _address = widget.entry!['address'] ?? '';
       _latitude = double.tryParse(widget.entry!['latitude']?.toString() ?? '');
-      _longitude = double.tryParse(widget.entry!['longitude']?.toString() ?? '');
+      _longitude = double.tryParse(
+        widget.entry!['longitude']?.toString() ?? '',
+      );
       _localPhotos.addAll(
         (widget.entry!['local_photos'] as List<dynamic>?)?.cast<String>() ?? [],
       );
@@ -57,17 +59,21 @@ class _AddEntryScreenState extends ConsumerState<AddEntryScreen> {
       _longitude = null;
     }
     _addressController.text = _address ?? '';
+    _displayPhotos = [..._localPhotos, ..._existingPhotos];
   }
 
   Future<void> _pick(ImageSource src) async {
-    if (_localPhotos.length + _existingPhotos.length >= 5) {
+    if (_displayPhotos.length >= 5) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Max 5 photos allowed')));
       return;
     }
     final XFile? f = await _picker.pickImage(source: src, imageQuality: 80);
-    if (f != null) setState(() => _localPhotos.add(f.path));
+    if (f != null)
+      setState(() {
+        _displayPhotos.add(f.path);
+      });
   }
 
   Future<void> _getLocation() async {
@@ -161,6 +167,15 @@ class _AddEntryScreenState extends ConsumerState<AddEntryScreen> {
       return;
     }
     final id = widget.entry != null ? widget.entry!['id'] : const Uuid().v4();
+    _localPhotos.clear();
+    _existingPhotos.clear();
+    for (var photo in _displayPhotos) {
+      if (photo.startsWith('http')) {
+        _existingPhotos.add(photo);
+      } else {
+        _localPhotos.add(photo);
+      }
+    }
     final Map<String, dynamic> entry = {
       'id': id,
       'user_id': userId,
@@ -233,16 +248,19 @@ class _AddEntryScreenState extends ConsumerState<AddEntryScreen> {
     }
   }
 
-  @override
-  void dispose() {
-    _title.dispose();
-    _desc.dispose();
-    _addressController.dispose();
-    super.dispose();
+  void _reorderPhotos(int oldIndex, int newIndex) {
+    if (newIndex > _displayPhotos.length) newIndex = _displayPhotos.length;
+    if (oldIndex < newIndex) newIndex--;
+    setState(() {
+      final item = _displayPhotos.removeAt(oldIndex);
+      _displayPhotos.insert(newIndex, item);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context); // Access current theme
+
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -251,17 +269,17 @@ class _AddEntryScreenState extends ConsumerState<AddEntryScreen> {
         ),
         title: Text(
           widget.entry != null ? 'Edit Journey' : 'New Journey',
-          style: const TextStyle(
+          style: TextStyle(
             fontWeight: FontWeight.bold,
             fontSize: 24,
-            color: Colors.white,
+            color: Colors.white, // Dynamic color
             fontFamily: 'Roboto',
           ),
         ),
         actions: [
           if (!_saving)
             IconButton(
-              icon: const Icon(Icons.save, color: Colors.white),
+              icon: Icon(Icons.save, color: Colors.white),
               onPressed: _save,
             ),
         ],
@@ -278,9 +296,12 @@ class _AddEntryScreenState extends ConsumerState<AddEntryScreen> {
         ),
       ),
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [Color(0xFFF5F7FA), Color(0xFFEAF2F8)],
+            colors: [
+              theme.colorScheme.surface.withOpacity(0.9),
+              theme.colorScheme.background,
+            ],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
           ),
@@ -295,22 +316,22 @@ class _AddEntryScreenState extends ConsumerState<AddEntryScreen> {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(15),
                 ),
-                color: Colors.white,
+                color: theme.cardTheme.color ?? theme.colorScheme.surface,
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: TextField(
                     controller: _title,
                     decoration: InputDecoration(
                       labelText: 'Journey Title',
+                      border: OutlineInputBorder(),
                       labelStyle: TextStyle(
                         fontSize: 18,
-                        color: Colors.grey[700],
+                        color: theme.colorScheme.onSurface.withOpacity(0.7),
                       ),
-                      border: InputBorder.none,
                     ),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 18,
-                      color: Color(0xFF2C3E50),
+                      color: theme.colorScheme.onSurface,
                     ),
                   ),
                 ),
@@ -321,7 +342,7 @@ class _AddEntryScreenState extends ConsumerState<AddEntryScreen> {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(15),
                 ),
-                color: Colors.white,
+                color: theme.cardTheme.color ?? theme.colorScheme.surface,
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: TextField(
@@ -331,13 +352,13 @@ class _AddEntryScreenState extends ConsumerState<AddEntryScreen> {
                       labelText: 'Description',
                       labelStyle: TextStyle(
                         fontSize: 18,
-                        color: Colors.grey[700],
+                        color: theme.colorScheme.onSurface.withOpacity(0.7),
                       ),
-                      border: InputBorder.none,
+                      border: OutlineInputBorder(),
                     ),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 16,
-                      color: Color(0xFF34495E),
+                      color: theme.colorScheme.onSurface,
                     ),
                   ),
                 ),
@@ -348,11 +369,11 @@ class _AddEntryScreenState extends ConsumerState<AddEntryScreen> {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(15),
                 ),
-                color: Colors.white,
+                color: theme.cardTheme.color ?? theme.colorScheme.surface,
                 child: ListTile(
-                  leading: const Icon(
+                  leading: Icon(
                     Icons.calendar_today,
-                    color: Color(0xFF3498DB),
+                    color: theme.colorScheme.primary,
                   ),
                   title: Text(
                     _selectedDateTime != null
@@ -360,12 +381,12 @@ class _AddEntryScreenState extends ConsumerState<AddEntryScreen> {
                             _selectedDateTime!,
                           ).toLocal().toString().split('.')[0]
                         : 'Select Date & Time',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 16,
-                      color: Color(0xFF2C3E50),
+                      color: theme.colorScheme.onSurface,
                     ),
                   ),
-                  trailing: const Icon(Icons.edit, color: Color(0xFF3498DB)),
+                  trailing: Icon(Icons.edit, color: theme.colorScheme.primary),
                   onTap: _selectDateTime,
                 ),
               ),
@@ -375,42 +396,42 @@ class _AddEntryScreenState extends ConsumerState<AddEntryScreen> {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(15),
                 ),
-                color: Colors.white,
+                color: theme.cardTheme.color ?? theme.colorScheme.surface,
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Row(
                     children: [
-                      const Icon(Icons.location_on, color: Color(0xFF3498DB)),
+                      Icon(Icons.location_on, color: theme.colorScheme.primary),
                       const SizedBox(width: 12),
                       Expanded(
                         child: TextField(
-                          controller: _addressController,
+                          textDirection: TextDirection.ltr,
                           decoration: InputDecoration(
-                            labelText:
-                                'Location (e.g., City, Latitude,Longitude)',
+                            labelText: 'Location (e.g., City or Address)',
                             labelStyle: TextStyle(
                               fontSize: 16,
-                              color: Colors.grey[700],
+                              color: theme.colorScheme.onSurface.withOpacity(
+                                0.7,
+                              ),
                             ),
                             border: InputBorder.none,
                           ),
+                          controller: _addressController,
                           onChanged: (value) {
                             _address = value;
                             _latitude = null;
                             _longitude = null;
                           },
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 16,
-                            color: Color(0xFF34495E),
+                            color: theme.colorScheme.onSurface,
                           ),
-                          textDirection: TextDirection.ltr,
-                          textAlign: TextAlign.left,
                         ),
                       ),
                       IconButton(
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.my_location,
-                          color: Color(0xFF3498DB),
+                          color: theme.colorScheme.primary,
                         ),
                         onPressed: _getLocation,
                       ),
@@ -428,7 +449,7 @@ class _AddEntryScreenState extends ConsumerState<AddEntryScreen> {
                       icon: const Icon(Icons.camera_alt, size: 20),
                       label: const Text('Camera'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Color(0xFF3498DB),
+                        backgroundColor: Colors.lightBlue,
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -445,7 +466,7 @@ class _AddEntryScreenState extends ConsumerState<AddEntryScreen> {
                       icon: const Icon(Icons.photo, size: 20),
                       label: const Text('Gallery'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Color(0xFF3498DB),
+                        backgroundColor: Colors.lightBlue,
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -458,7 +479,7 @@ class _AddEntryScreenState extends ConsumerState<AddEntryScreen> {
                 ],
               ),
               const SizedBox(height: 16),
-              if (_localPhotos.isNotEmpty || _existingPhotos.isNotEmpty)
+              if (_displayPhotos.isNotEmpty)
                 GridView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
@@ -467,57 +488,98 @@ class _AddEntryScreenState extends ConsumerState<AddEntryScreen> {
                     crossAxisSpacing: 8,
                     mainAxisSpacing: 8,
                   ),
-                  itemCount: _localPhotos.length + _existingPhotos.length,
+                  itemCount: _displayPhotos.length + 1,
                   itemBuilder: (context, index) {
-                    final isLocal = index < _localPhotos.length;
-                    final photo = isLocal
-                        ? _localPhotos[index]
-                        : _existingPhotos[index - _localPhotos.length];
-                    return Stack(
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: isLocal
-                              ? Image.file(
-                                  File(photo),
-                                  width: double.infinity,
-                                  height: double.infinity,
-                                  fit: BoxFit.cover,
-                                )
-                              : CachedNetworkImage(
-                                  imageUrl: photo,
-                                  width: double.infinity,
-                                  height: double.infinity,
-                                  fit: BoxFit.cover,
-                                  placeholder: (context, url) =>
-                                      Container(color: Colors.grey[200]),
-                                  errorWidget: (context, url, error) =>
-                                      const Icon(Icons.broken_image, size: 40),
-                                ),
-                        ),
-                        Positioned(
-                          top: 4,
-                          right: 4,
-                          child: IconButton(
-                            icon: const Icon(
-                              Icons.close,
-                              size: 18,
-                              color: Colors.red,
+                    if (index == _displayPhotos.length) {
+                      return DragTarget<int>(
+                        builder: (context, candidateData, rejectedData) {
+                          return SizedBox(
+                            width: double.infinity,
+                            height: 100, // Match approximate image height
+                            child: Container(color: Colors.transparent),
+                          );
+                        },
+                        onAccept: (oldIndex) {
+                          _reorderPhotos(oldIndex, index);
+                        },
+                      );
+                    }
+                    final photo = _displayPhotos[index];
+                    final isLocal = !photo.startsWith('http');
+                    return DragTarget<int>(
+                      onAccept: (oldIndex) {
+                        _reorderPhotos(oldIndex, index);
+                      },
+                      builder: (context, candidateData, rejectedData) {
+                        return LongPressDraggable<int>(
+                          data: index,
+                          feedback: Opacity(
+                            opacity: 0.7,
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: isLocal
+                                  ? Image.file(
+                                      File(photo),
+                                      width: 100,
+                                      height: 100,
+                                      fit: BoxFit.cover,
+                                    )
+                                  : CachedNetworkImage(
+                                      imageUrl: photo,
+                                      width: 100,
+                                      height: 100,
+                                      fit: BoxFit.cover,
+                                    ),
                             ),
-                            onPressed: () {
-                              setState(() {
-                                if (isLocal) {
-                                  _localPhotos.removeAt(index);
-                                } else {
-                                  _existingPhotos.removeAt(
-                                    index - _localPhotos.length,
-                                  );
-                                }
-                              });
-                            },
                           ),
-                        ),
-                      ],
+                          child: Stack(
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: isLocal
+                                    ? Image.file(
+                                        File(photo),
+                                        width: double.infinity,
+                                        height: double.infinity,
+                                        fit: BoxFit.cover,
+                                      )
+                                    : CachedNetworkImage(
+                                        imageUrl: photo,
+                                        width: double.infinity,
+                                        height: double.infinity,
+                                        fit: BoxFit.cover,
+                                        placeholder: (context, url) =>
+                                            Container(
+                                              color: theme.colorScheme.surface
+                                                  .withOpacity(0.2),
+                                            ),
+                                        errorWidget: (context, url, error) =>
+                                            const Icon(
+                                              Icons.broken_image,
+                                              size: 40,
+                                            ),
+                                      ),
+                              ),
+                              Positioned(
+                                top: 4,
+                                right: 4,
+                                child: IconButton(
+                                  icon: Icon(
+                                    Icons.close,
+                                    size: 18,
+                                    color: theme.colorScheme.error,
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      _displayPhotos.removeAt(index);
+                                    });
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
                     );
                   },
                 ),
@@ -525,26 +587,26 @@ class _AddEntryScreenState extends ConsumerState<AddEntryScreen> {
               Center(
                 child: ElevatedButton.icon(
                   icon: _saving
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 24,
                           height: 24,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: Colors.white,
+                            color: theme.colorScheme.onPrimary,
                           ),
                         )
-                      : const Icon(Icons.save, size: 20),
+                      : Icon(Icons.save, size: 20),
                   label: Text(
                     _saving
                         ? 'Saving...'
                         : widget.entry != null
                         ? 'Update Journey'
                         : 'Save Journey',
-                    style: const TextStyle(fontSize: 16),
+                    style: TextStyle(fontSize: 16),
                   ),
                   onPressed: _saving ? null : _save,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Color(0xFF2ECC71),
+                    backgroundColor: Colors.green,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -554,7 +616,7 @@ class _AddEntryScreenState extends ConsumerState<AddEntryScreen> {
                       vertical: 14,
                     ),
                     elevation: 6,
-                    shadowColor: Colors.green[200],
+                    shadowColor: theme.colorScheme.shadow,
                   ),
                 ),
               ),
@@ -565,4 +627,4 @@ class _AddEntryScreenState extends ConsumerState<AddEntryScreen> {
       ),
     );
   }
-} 
+}

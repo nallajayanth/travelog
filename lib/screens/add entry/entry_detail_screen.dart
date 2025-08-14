@@ -1,4 +1,3 @@
-
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -54,6 +53,42 @@ class EntryDetailScreen extends ConsumerWidget {
       });
     }
 
+    Future<void> _confirmAndDeleteEntry() async {
+      final bool? confirm = await showDialog<bool>(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: const Text('Confirm Delete'),
+            content: const Text('Are you sure you want to delete this entry?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Delete'),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (confirm == true) {
+        await ref.read(entriesNotifierProvider.notifier).deleteEntryAt(index);
+        if (context.mounted) {
+          Navigator.of(context).pop();
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Entry deleted')));
+        }
+      }
+    }
+
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -83,17 +118,7 @@ class EntryDetailScreen extends ConsumerWidget {
           ),
           IconButton(
             icon: const Icon(Icons.delete, color: Colors.white),
-            onPressed: () async {
-              await ref
-                  .read(entriesNotifierProvider.notifier)
-                  .deleteEntryAt(index);
-              if (context.mounted) {
-                Navigator.of(context).pop();
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(const SnackBar(content: Text('Entry deleted')));
-              }
-            },
+            onPressed: _confirmAndDeleteEntry,
           ),
         ],
         elevation: 6,
@@ -141,7 +166,7 @@ class EntryDetailScreen extends ConsumerWidget {
                                 )
                               : Image.file(
                                   File(localPhotos[index]),
-                                  fit: BoxFit.cover,
+                                  fit: BoxFit.contain,
                                 ),
                         ),
                       ),
@@ -167,7 +192,9 @@ class EntryDetailScreen extends ConsumerWidget {
                     style: const TextStyle(
                       fontSize: 28,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF2C3E50),
+                      color: Colors.blue,
+                      fontStyle: FontStyle.italic,
+                      fontFamily: "Roboto",
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -176,7 +203,7 @@ class EntryDetailScreen extends ConsumerWidget {
                       const Icon(
                         Icons.calendar_today,
                         size: 18,
-                        color: Color(0xFF7F8C8D),
+                        color: Color.fromARGB(255, 137, 224, 230),
                       ),
                       const SizedBox(width: 6),
                       Text(
@@ -256,47 +283,29 @@ class EntryDetailScreen extends ConsumerWidget {
                     entry['description'] ?? '',
                     style: const TextStyle(
                       fontSize: 16,
-                      color: Color(0xFF34495E),
+                      color: Colors.blueGrey,
                     ),
                   ),
                   const SizedBox(height: 20),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        '${entry['distance'] ?? '0'} Miles',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Color(0xFF7F8C8D),
-                        ),
-                      ),
-                      Text(
-                        '${entry['duration'] ?? '0h 0m'}',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Color(0xFF7F8C8D),
-                        ),
-                      ),
-                      Text(
-                        '${entry['elevation'] ?? '0ft'}',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Color(0xFF7F8C8D),
-                        ),
-                      ),
-                    ],
-                  ),
+
                   const SizedBox(height: 20),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
                       ElevatedButton.icon(
-                        onPressed: () {},
-                        icon: const Icon(Icons.share, size: 18),
-                        label: const Text('Share'),
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  AddEntryScreen(entry: entry, index: index),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.edit, size: 18),
+                        label: const Text('Edit Entry'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.grey[300],
-                          foregroundColor: Color(0xFF2C3E50),
+                          backgroundColor: Color(0xFF3498DB),
+                          foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(25),
                           ),
@@ -306,18 +315,9 @@ class EntryDetailScreen extends ConsumerWidget {
                           ),
                         ),
                       ),
+
                       ElevatedButton.icon(
-                        onPressed: () async {
-                          await ref
-                              .read(entriesNotifierProvider.notifier)
-                              .deleteEntryAt(index);
-                          if (context.mounted) {
-                            Navigator.of(context).pop();
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Entry deleted')),
-                            );
-                          }
-                        },
+                        onPressed: _confirmAndDeleteEntry,
                         icon: const Icon(Icons.delete, size: 18),
                         label: const Text('Delete'),
                         style: ElevatedButton.styleFrom(
@@ -335,32 +335,32 @@ class EntryDetailScreen extends ConsumerWidget {
                     ],
                   ),
                   const SizedBox(height: 20),
-                  Center(
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                AddEntryScreen(entry: entry, index: index),
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.edit, size: 18),
-                      label: const Text('Edit Entry'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Color(0xFF3498DB),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(25),
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 12,
-                        ),
-                        minimumSize: const Size(250, 50),
-                      ),
-                    ),
-                  ),
+                  // Center(
+                  //   child: ElevatedButton.icon(
+                  //     onPressed: () {
+                  //       Navigator.of(context).push(
+                  //         MaterialPageRoute(
+                  //           builder: (context) =>
+                  //               AddEntryScreen(entry: entry, index: index),
+                  //         ),
+                  //       );
+                  //     },
+                  //     icon: const Icon(Icons.edit, size: 18),
+                  //     label: const Text('Edit Entry'),
+                  //     style: ElevatedButton.styleFrom(
+                  //       backgroundColor: Color(0xFF3498DB),
+                  //       foregroundColor: Colors.white,
+                  //       shape: RoundedRectangleBorder(
+                  //         borderRadius: BorderRadius.circular(25),
+                  //       ),
+                  //       padding: const EdgeInsets.symmetric(
+                  //         horizontal: 20,
+                  //         vertical: 12,
+                  //       ),
+                  //       minimumSize: const Size(250, 50),
+                  //     ),
+                  //   ),
+                  // ),
                 ],
               ),
             ),
