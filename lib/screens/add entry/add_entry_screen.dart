@@ -34,6 +34,7 @@ class _AddEntryScreenState extends ConsumerState<AddEntryScreen> {
   late List<String> _displayPhotos;
 
   @override
+  @override
   void initState() {
     super.initState();
     if (widget.entry != null) {
@@ -46,12 +47,21 @@ class _AddEntryScreenState extends ConsumerState<AddEntryScreen> {
       _longitude = double.tryParse(
         widget.entry!['longitude']?.toString() ?? '',
       );
-      _localPhotos.addAll(
-        (widget.entry!['local_photos'] as List<dynamic>?)?.cast<String>() ?? [],
-      );
-      _existingPhotos.addAll(
-        (widget.entry!['photos'] as List<dynamic>?)?.cast<String>() ?? [],
-      );
+
+      // Clear existing lists first
+      _localPhotos.clear();
+      _existingPhotos.clear();
+
+      // Populate local photos
+      final localPhotosList =
+          (widget.entry!['local_photos'] as List<dynamic>?)?.cast<String>() ??
+          [];
+      _localPhotos.addAll(localPhotosList);
+
+      // Populate existing photos (remote URLs)
+      final existingPhotosList =
+          (widget.entry!['photos'] as List<dynamic>?)?.cast<String>() ?? [];
+      _existingPhotos.addAll(existingPhotosList);
     } else {
       _selectedDateTime = DateTime.now().toIso8601String();
       _address = '';
@@ -59,6 +69,8 @@ class _AddEntryScreenState extends ConsumerState<AddEntryScreen> {
       _longitude = null;
     }
     _addressController.text = _address ?? '';
+
+    // Combine for display - local photos first, then remote URLs
     _displayPhotos = [..._localPhotos, ..._existingPhotos];
   }
 
@@ -167,8 +179,12 @@ class _AddEntryScreenState extends ConsumerState<AddEntryScreen> {
       return;
     }
     final id = widget.entry != null ? widget.entry!['id'] : const Uuid().v4();
+
+    // Clear and rebuild the photo lists
     _localPhotos.clear();
     _existingPhotos.clear();
+
+    // Separate local photos from remote URLs in _displayPhotos
     for (var photo in _displayPhotos) {
       if (photo.startsWith('http')) {
         _existingPhotos.add(photo);
@@ -176,6 +192,7 @@ class _AddEntryScreenState extends ConsumerState<AddEntryScreen> {
         _localPhotos.add(photo);
       }
     }
+
     final Map<String, dynamic> entry = {
       'id': id,
       'user_id': userId,
@@ -195,16 +212,19 @@ class _AddEntryScreenState extends ConsumerState<AddEntryScreen> {
       'synced': false,
     };
 
+    // Convert local photo paths to File objects
     final files = _localPhotos.map((p) => File(p)).toList();
+
     setState(() => _saving = true);
     try {
       if (widget.entry != null && widget.index != null) {
+        // For updates, pass both the files and existing photos separately
         await ref
             .read(entriesNotifierProvider.notifier)
             .updateEntry(
               widget.index!,
               entry,
-              images: files,
+              images: files.isNotEmpty ? files : null,
               existingPhotos: _existingPhotos,
             );
         if (mounted) {

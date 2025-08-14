@@ -4,11 +4,11 @@
 // import 'package:travlog_app/provider/entries_provider.dart';
 // import 'package:travlog_app/screens/add%20entry/add_entry_screen.dart';
 // import 'package:travlog_app/screens/add%20entry/entry_detail_screen.dart';
-// import 'package:travlog_app/screens/settings/settings_screen.dart'; // Import the SettingsScreen
+// import 'package:travlog_app/screens/settings/settings_screen.dart';
 // import 'package:travlog_app/widgets/entry_card.dart';
 // import 'package:connectivity_plus/connectivity_plus.dart';
 // import 'dart:async';
-// import 'dart:io'; // Added for InternetAddress
+// import 'dart:io';
 
 // class HomeScreen extends ConsumerStatefulWidget {
 //   const HomeScreen({super.key});
@@ -102,39 +102,39 @@
 //   Widget build(BuildContext context) {
 //     final entries = ref.watch(entriesNotifierProvider);
 //     final notifier = ref.read(entriesNotifierProvider.notifier);
+//     final theme = Theme.of(context);
+//     final colorScheme = theme.colorScheme;
 
 //     final filteredEntries = entries.where((e) {
 //       final title = (e['title'] as String?)?.toLowerCase() ?? '';
 //       final desc = (e['description'] as String?)?.toLowerCase() ?? '';
 //       final dateStr =
 //           (e['date_time'] as String?)?.split('T').first.toLowerCase() ?? '';
-//       final address =
-//           (e['address'] as String?)?.toLowerCase() ?? ''; // Added address
-
+//       final address = (e['address'] as String?)?.toLowerCase() ?? '';
 //       final tags = List<String>.from(
 //         e['tags'] ?? [],
 //       ).map((t) => t.toLowerCase());
-
 //       final query = _searchQuery.toLowerCase();
 //       return title.contains(query) ||
 //           desc.contains(query) ||
 //           dateStr.contains(query) ||
-//           address.contains(query) || // Added address filtering
+//           address.contains(query) ||
 //           tags.any((tag) => tag.contains(query));
 //     }).toList();
 
 //     return Scaffold(
+//       backgroundColor: colorScheme.background,
 //       extendBodyBehindAppBar: true,
 //       appBar: AppBar(
 //         backgroundColor: Colors.transparent,
 //         elevation: 0,
-//         title: const Text(
+//         title: Text(
 //           'Travlog',
 //           style: TextStyle(
 //             fontWeight: FontWeight.bold,
 //             fontSize: 28,
-//             color: Colors.white,
-//             shadows: [
+//             color: colorScheme.onPrimary,
+//             shadows: const [
 //               Shadow(
 //                 blurRadius: 10.0,
 //                 color: Colors.black26,
@@ -144,7 +144,7 @@
 //           ),
 //         ),
 //         leading: IconButton(
-//           icon: const Icon(Icons.settings, color: Colors.white, size: 28),
+//           icon: Icon(Icons.settings, color: colorScheme.onPrimary, size: 28),
 //           onPressed: () {
 //             Navigator.push(
 //               context,
@@ -158,7 +158,7 @@
 //             child: Chip(
 //               label: Text(
 //                 _isConnected ? 'Online' : 'Offline',
-//                 style: const TextStyle(
+//                 style: TextStyle(
 //                   color: Colors.white,
 //                   fontWeight: FontWeight.bold,
 //                 ),
@@ -172,7 +172,7 @@
 //             ),
 //           ),
 //           IconButton(
-//             icon: const Icon(Icons.sync, color: Colors.white, size: 28),
+//             icon: Icon(Icons.sync, color: colorScheme.onPrimary, size: 28),
 //             onPressed: _isConnected
 //                 ? () async {
 //                     await notifier.fetchFromSupabase();
@@ -187,8 +187,8 @@
 //           decoration: BoxDecoration(
 //             gradient: LinearGradient(
 //               colors: [
-//                 Theme.of(context).colorScheme.primary.withOpacity(0.8),
-//                 Theme.of(context).colorScheme.secondary.withOpacity(0.6),
+//                 colorScheme.primary.withOpacity(0.8),
+//                 colorScheme.secondary.withOpacity(0.6),
 //               ],
 //               begin: Alignment.topLeft,
 //               end: Alignment.bottomRight,
@@ -198,17 +198,18 @@
 //       ),
 //       body: Stack(
 //         children: [
-//           // Subtle background gradient for depth
 //           Container(
-//             decoration: const BoxDecoration(
+//             decoration: BoxDecoration(
 //               gradient: LinearGradient(
-//                 colors: [Color(0xFFEAF2F8), Color(0xFFD4E6F1)],
+//                 colors: [
+//                   colorScheme.background,
+//                   colorScheme.background.withOpacity(0.95),
+//                 ],
 //                 begin: Alignment.topCenter,
 //                 end: Alignment.bottomCenter,
 //               ),
 //             ),
 //           ),
-//           // Faint travel-themed overlay
 //           Opacity(
 //             opacity: 0.05,
 //             child: Image.network(
@@ -220,44 +221,40 @@
 //           ),
 //           Column(
 //             children: [
-//               // Search bar below app bar
 //               Padding(
 //                 padding: const EdgeInsets.fromLTRB(16, 100, 16, 12),
 //                 child: TextField(
-//                   style: const TextStyle(color: Colors.black),
+//                   style: TextStyle(color: colorScheme.onSurface),
 //                   decoration: InputDecoration(
 //                     labelText:
 //                         'Search journeys by title, description, tags, date, or location',
-//                     labelStyle: TextStyle(color: Colors.grey[600]),
-
+//                     labelStyle: TextStyle(
+//                       color: colorScheme.onSurface.withOpacity(0.6),
+//                     ),
 //                     border: OutlineInputBorder(
 //                       borderRadius: BorderRadius.circular(25),
 //                       borderSide: BorderSide.none,
 //                     ),
-//                     prefixIcon: const Icon(
-//                       Icons.search,
-//                       color: Color(0xFF3498DB),
-//                     ),
+//                     prefixIcon: Icon(Icons.search, color: colorScheme.primary),
 //                     suffixIcon: _searchQuery.isNotEmpty
 //                         ? IconButton(
-//                             icon: const Icon(
-//                               Icons.clear,
-//                               color: Color(0xFF3498DB),
-//                             ),
+//                             icon: Icon(Icons.clear, color: colorScheme.primary),
 //                             onPressed: () => setState(() => _searchQuery = ''),
 //                           )
 //                         : null,
 //                     filled: true,
-//                     fillColor: Colors.white,
+//                     fillColor: colorScheme.surface,
 //                     contentPadding: const EdgeInsets.symmetric(
 //                       vertical: 16,
 //                       horizontal: 20,
 //                     ),
-//                     hintStyle: TextStyle(color: Colors.grey[400]),
+//                     hintStyle: TextStyle(
+//                       color: colorScheme.onSurface.withOpacity(0.4),
+//                     ),
 //                     focusedBorder: OutlineInputBorder(
 //                       borderRadius: BorderRadius.circular(25),
-//                       borderSide: const BorderSide(
-//                         color: Color(0xFF3498DB),
+//                       borderSide: BorderSide(
+//                         color: colorScheme.primary,
 //                         width: 2,
 //                       ),
 //                     ),
@@ -274,24 +271,24 @@
 //                             Icon(
 //                               Icons.book_outlined,
 //                               size: 100,
-//                               color: Theme.of(
-//                                 context,
-//                               ).colorScheme.primary.withOpacity(0.5),
+//                               color: colorScheme.onBackground.withOpacity(0.5),
 //                             ),
 //                             const SizedBox(height: 16),
 //                             Text(
 //                               'No journeys yet',
-//                               style: Theme.of(context).textTheme.headlineMedium
-//                                   ?.copyWith(
-//                                     fontWeight: FontWeight.bold,
-//                                     color: Color(0xFF2C3E50),
-//                                   ),
+//                               style: theme.textTheme.headlineMedium?.copyWith(
+//                                 fontWeight: FontWeight.bold,
+//                                 color: colorScheme.onBackground,
+//                               ),
 //                             ),
 //                             const SizedBox(height: 8),
 //                             Text(
 //                               'Tap + to capture your first adventure',
-//                               style: Theme.of(context).textTheme.bodyLarge
-//                                   ?.copyWith(color: Colors.grey[600]),
+//                               style: theme.textTheme.bodyLarge?.copyWith(
+//                                 color: colorScheme.onBackground.withOpacity(
+//                                   0.6,
+//                                 ),
+//                               ),
 //                             ),
 //                           ],
 //                         ),
@@ -299,8 +296,8 @@
 //                     : SmartRefresher(
 //                         controller: _refreshController,
 //                         enablePullUp: false,
-//                         header: const WaterDropMaterialHeader(
-//                           backgroundColor: Color(0xFF3498DB),
+//                         header: WaterDropMaterialHeader(
+//                           backgroundColor: colorScheme.primary,
 //                         ),
 //                         onRefresh: () async {
 //                           await notifier.fetchFromSupabase();
@@ -328,7 +325,10 @@
 //                                 child: Material(
 //                                   elevation: 4,
 //                                   borderRadius: BorderRadius.circular(20),
-//                                   shadowColor: Colors.black.withOpacity(0.1),
+//                                   shadowColor: colorScheme.shadow.withOpacity(
+//                                     0.2,
+//                                   ),
+//                                   color: colorScheme.surface,
 //                                   child: EntryCard(entry: e),
 //                                 ),
 //                               ),
@@ -347,8 +347,8 @@
 //           onPressed: () => Navigator.of(
 //             context,
 //           ).push(MaterialPageRoute(builder: (_) => const AddEntryScreen())),
-//           icon: const Icon(Icons.add, color: Colors.white, size: 28),
-//           label: const Text(
+//           icon: Icon(Icons.add, color: Colors.white, size: 28),
+//           label: Text(
 //             'New Journey',
 //             style: TextStyle(
 //               color: Colors.white,
@@ -356,7 +356,7 @@
 //               fontSize: 16,
 //             ),
 //           ),
-//           backgroundColor: const Color(0xFF2ECC71),
+//           backgroundColor: Colors.green,
 //           elevation: 8,
 //           shape: RoundedRectangleBorder(
 //             borderRadius: BorderRadius.circular(20),
@@ -368,6 +368,8 @@
 //   }
 // }
 
+
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pull_to_refresh/pull_to_refresh.dart';
@@ -375,6 +377,7 @@ import 'package:travlog_app/provider/entries_provider.dart';
 import 'package:travlog_app/screens/add%20entry/add_entry_screen.dart';
 import 'package:travlog_app/screens/add%20entry/entry_detail_screen.dart';
 import 'package:travlog_app/screens/settings/settings_screen.dart';
+import 'package:travlog_app/services/connectivity_service.dart';
 import 'package:travlog_app/widgets/entry_card.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'dart:async';
@@ -472,10 +475,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   Widget build(BuildContext context) {
     final entries = ref.watch(entriesNotifierProvider);
     final notifier = ref.read(entriesNotifierProvider.notifier);
+    final syncStatus = ref.watch(syncStatusProvider);
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    final filteredEntries = entries.where((e) {
+    // Filter out entries marked for deletion and apply search
+    final visibleEntries = entries.where((e) => e['sync_status'] != 'delete_pending').toList();
+    
+    final filteredEntries = visibleEntries.where((e) {
       final title = (e['title'] as String?)?.toLowerCase() ?? '';
       final desc = (e['description'] as String?)?.toLowerCase() ?? '';
       final dateStr =
@@ -523,17 +530,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           },
         ),
         actions: [
+          // Smart sync status chip
           Padding(
             padding: const EdgeInsets.only(right: 8.0),
             child: Chip(
+              avatar: Icon(
+                syncStatus.icon,
+                color: Colors.white,
+                size: 16,
+              ),
               label: Text(
-                _isConnected ? 'Online' : 'Offline',
-                style: TextStyle(
+                syncStatus.displayText,
+                style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
+                  fontSize: 12,
                 ),
               ),
-              backgroundColor: _isConnected ? Colors.green : Colors.red,
+              backgroundColor: syncStatus.color,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20),
               ),
@@ -541,16 +555,35 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               visualDensity: VisualDensity.compact,
             ),
           ),
+          // Sync/Refresh button
           IconButton(
-            icon: Icon(Icons.sync, color: colorScheme.onPrimary, size: 28),
-            onPressed: _isConnected
-                ? () async {
-                    await notifier.fetchFromSupabase();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Synced with Supabase')),
-                    );
-                  }
-                : null,
+            icon: Icon(
+              _isConnected ? Icons.sync : Icons.refresh,
+              color: colorScheme.onPrimary,
+              size: 28,
+            ),
+            onPressed: () async {
+              if (_isConnected) {
+                // Online - sync with Supabase
+                await notifier.fetchFromSupabase();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Synced with cloud storage'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              } else {
+                // Offline - refresh local data
+                await notifier.refreshEntries();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Refreshed local data'),
+                    duration: Duration(seconds: 1),
+                  ),
+                );
+              }
+            },
+            tooltip: _isConnected ? 'Sync with cloud' : 'Refresh local data',
           ),
         ],
         flexibleSpace: Container(
@@ -587,6 +620,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               fit: BoxFit.cover,
               height: double.infinity,
               width: double.infinity,
+              errorBuilder: (context, error, stackTrace) {
+                // Handle network image error gracefully
+                return Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        colorScheme.primary.withOpacity(0.1),
+                        colorScheme.secondary.withOpacity(0.05),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                  ),
+                );
+              },
             ),
           ),
           Column(
@@ -639,13 +687,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
-                              Icons.book_outlined,
+                              _searchQuery.isEmpty 
+                                  ? Icons.book_outlined 
+                                  : Icons.search_off,
                               size: 100,
                               color: colorScheme.onBackground.withOpacity(0.5),
                             ),
                             const SizedBox(height: 16),
                             Text(
-                              'No journeys yet',
+                              _searchQuery.isEmpty 
+                                  ? 'No journeys yet'
+                                  : 'No matching journeys',
                               style: theme.textTheme.headlineMedium?.copyWith(
                                 fontWeight: FontWeight.bold,
                                 color: colorScheme.onBackground,
@@ -653,13 +705,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              'Tap + to capture your first adventure',
+                              _searchQuery.isEmpty 
+                                  ? 'Tap + to capture your first adventure'
+                                  : 'Try a different search term',
                               style: theme.textTheme.bodyLarge?.copyWith(
-                                color: colorScheme.onBackground.withOpacity(
-                                  0.6,
-                                ),
+                                color: colorScheme.onBackground.withOpacity(0.6),
                               ),
                             ),
+                            if (_searchQuery.isNotEmpty) ...[
+                              const SizedBox(height: 16),
+                              ElevatedButton(
+                                onPressed: () => setState(() => _searchQuery = ''),
+                                child: const Text('Clear Search'),
+                              ),
+                            ],
                           ],
                         ),
                       )
@@ -670,7 +729,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                           backgroundColor: colorScheme.primary,
                         ),
                         onRefresh: () async {
-                          await notifier.fetchFromSupabase();
+                          if (_isConnected) {
+                            await notifier.fetchFromSupabase();
+                          } else {
+                            await notifier.refreshEntries();
+                          }
                           _refreshController.refreshCompleted();
                         },
                         child: ListView.separated(
@@ -680,26 +743,51 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                           itemCount: filteredEntries.length,
                           itemBuilder: (context, idx) {
                             final e = filteredEntries[idx];
-                            final originalIndex = entries.indexOf(e);
+                            // Find original index in visible entries for navigation
+                            final originalIndex = visibleEntries.indexWhere(
+                              (entry) => entry['local_id'] == e['local_id'],
+                            );
+                            
                             return GestureDetector(
                               onTap: () {
                                 Navigator.of(context).push(
                                   MaterialPageRoute(
-                                    builder: (_) =>
-                                        EntryDetailScreen(index: originalIndex),
+                                    builder: (_) => EntryDetailScreen(
+                                      index: originalIndex >= 0 ? originalIndex : idx,
+                                    ),
                                   ),
                                 );
                               },
                               child: Hero(
-                                tag: 'entry_${e['id'] ?? idx}',
+                                tag: 'entry_${e['local_id'] ?? idx}',
                                 child: Material(
                                   elevation: 4,
                                   borderRadius: BorderRadius.circular(20),
-                                  shadowColor: colorScheme.shadow.withOpacity(
-                                    0.2,
-                                  ),
+                                  shadowColor: colorScheme.shadow.withOpacity(0.2),
                                   color: colorScheme.surface,
-                                  child: EntryCard(entry: e),
+                                  child: Stack(
+                                    children: [
+                                      EntryCard(entry: e),
+                                      // Add sync status indicator on the card
+                                      if (e['sync_status'] != 'synced')
+                                        Positioned(
+                                          top: 8,
+                                          right: 8,
+                                          child: Container(
+                                            padding: const EdgeInsets.all(4),
+                                            decoration: BoxDecoration(
+                                              color: _getSyncStatusColor(e['sync_status']),
+                                              borderRadius: BorderRadius.circular(12),
+                                            ),
+                                            child: Icon(
+                                              _getSyncStatusIcon(e['sync_status']),
+                                              size: 16,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
                                 ),
                               ),
                             );
@@ -717,8 +805,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           onPressed: () => Navigator.of(
             context,
           ).push(MaterialPageRoute(builder: (_) => const AddEntryScreen())),
-          icon: Icon(Icons.add, color: Colors.white, size: 28),
-          label: Text(
+          icon: const Icon(Icons.add, color: Colors.white, size: 28),
+          label: const Text(
             'New Journey',
             style: TextStyle(
               color: Colors.white,
@@ -735,5 +823,35 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         ),
       ),
     );
+  }
+
+  Color _getSyncStatusColor(String? syncStatus) {
+    switch (syncStatus) {
+      case 'synced':
+        return const Color(0xFF27AE60); // Green
+      case 'pending':
+        return const Color(0xFFF39C12); // Orange
+      case 'modified':
+        return const Color(0xFFE67E22); // Orange-red
+      case 'error':
+        return const Color(0xFFE74C3C); // Red
+      default:
+        return const Color(0xFF95A5A6); // Gray
+    }
+  }
+
+  IconData _getSyncStatusIcon(String? syncStatus) {
+    switch (syncStatus) {
+      case 'synced':
+        return Icons.cloud_done;
+      case 'pending':
+        return Icons.cloud_upload;
+      case 'modified':
+        return Icons.cloud_sync;
+      case 'error':
+        return Icons.cloud_off;
+      default:
+        return Icons.cloud_outlined;
+    }
   }
 }

@@ -73,7 +73,7 @@ Future<List<String>> getImageTags(List<File> images) async {
       headers: {'Content-Type': 'application/json'},
     );
     print('Vision API response status: ${response.statusCode}');
-    print('Vision API raw response: ${response.body}');
+    
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       Set<String> tags = {};
@@ -89,287 +89,383 @@ Future<List<String>> getImageTags(List<File> images) async {
       return result;
     } else {
       print('Vision API error: ${response.statusCode} ${response.body}');
-      if (response.statusCode == 403) {
-        throw Exception('Billing not enabled for Google Cloud Vision API. Please enable billing at https://console.developers.google.com/billing/enable?project=695801669377');
-      }
-      return [];
+      return []; // Return empty list instead of throwing
     }
   } catch (e) {
     print('Error calling Vision API: $e');
-    throw e;
+    return []; // Return empty list instead of throwing
   }
 }
 
 class EntriesNotifier extends StateNotifier<List<Map<String, dynamic>>> {
   final Ref ref;
   late final Box _box;
+  int _nextLocalId = 1;
 
   StreamSubscription<List<ConnectivityResult>>? _connSub;
-
-  List<Map<String, dynamic>> _remoteEntries = [];
+  
+  // Track sync status for UI
+  bool _hasPendingChanges = false;
+  bool get hasPendingChanges => _hasPendingChanges;
 
   EntriesNotifier(this.ref) : super([]) {
     _init();
     _connSub = Connectivity().onConnectivityChanged.listen((results) {
       if (results.isNotEmpty && results.first != ConnectivityResult.none) {
-        _syncPendingEntries();
+        _syncToSupabase();
       }
     });
   }
 
   Future<void> _init() async {
-    _box = Hive.box('entries');
-    _updateState();
-    fetchFromSupabase();
-    _syncPendingEntries();
+    try {
+      _box = Hive.box('entries');
+      _loadNextLocalId();
+      await _loadLocalEntries();
+      // Try to sync with Supabase if online
+      _syncToSupabase();
+    } catch (e) {
+      print('Error initializing entries: $e');
+    }
   }
 
-  void _updateState() {
-    final localPending = _box.values
-        .map((e) => Map<String, dynamic>.from(e))
-        .where((e) => e['synced'] == false)
-        .toList();
-    state = [...localPending, ..._remoteEntries];
+  void _loadNextLocalId() {
+    // Find the highest local ID and set next ID
+    final entries = _box.values.map((e) => Map<String, dynamic>.from(e)).toList();
+    if (entries.isNotEmpty) {
+      final maxLocalId = entries
+          .map((e) => e['local_id'] as int? ?? 0)
+          .reduce((a, b) => a > b ? a : b);
+      _nextLocalId = maxLocalId + 1;
+    }
+  }
+
+  Future<void> _loadLocalEntries() async {
+    try {
+      final entries = _box.values
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList()
+          ..sort((a, b) {
+            final aDateTime = DateTime.tryParse(a['date_time'] ?? '') ?? DateTime.now();
+            final bDateTime = DateTime.tryParse(b['date_time'] ?? '') ?? DateTime.now();
+            return bDateTime.compareTo(aDateTime); // Most recent first
+          });
+      
+      // Check if there are pending changes
+      _hasPendingChanges = entries.any((e) => 
+          e['needs_sync'] == true || 
+          e['sync_status'] == 'pending' || 
+          e['sync_status'] == 'modified'
+      );
+      
+      state = entries;
+      print('Loaded ${entries.length} entries from local storage');
+    } catch (e) {
+      print('Error loading local entries: $e');
+      state = [];
+    }
+  }
+
+  // Public method to refresh entries from local storage
+  Future<void> refreshEntries() async {
+    try {
+      await _loadLocalEntries();
+      print('Entries refreshed from local storage');
+    } catch (e) {
+      print('Error refreshing entries: $e');
+    }
   }
 
   Future<void> addEntry(
     Map<String, dynamic> entry, {
     List<File>? images,
   }) async {
-    final supabaseService = ref.read(supabaseServiceProvider);
-    final conn = await Connectivity().checkConnectivity();
-
-    if (!conn.contains(ConnectivityResult.none)) {
-      print('Online, uploading directly to Supabase');
-      final userId = Supabase.instance.client.auth.currentUser?.id;
-      if (userId == null) {
-        print('User not authenticated, cannot upload');
-        throw Exception('User not authenticated. Please log in.');
-      }
-
-      final uploadedUrls = <String>[];
+    try {
+      print('Adding new entry to local storage');
+      
+      // Generate tags from images if provided
       List<String> tags = [];
+      if (images != null && images.isNotEmpty) {
+        try {
+          tags = await getImageTags(images);
+        } catch (e) {
+          print('Tagging failed: $e');
+          // Continue without tags rather than failing
+        }
+      }
+
+      // Generate address from coordinates
       String address = 'Unknown location';
-      if (images != null && images.isNotEmpty) {
-        try {
-          tags = await getImageTags(images);
-        } catch (e) {
-          print('Tagging failed: $e');
-          throw e;
-        }
-        for (final img in images) {
-          try {
-            final url = await supabaseService.uploadPhoto(img);
-            uploadedUrls.add(url);
-            print('Photo uploaded: $url');
-          } catch (e) {
-            print('Error uploading photo ${img.path}: $e');
-          }
-        }
-      }
-
       if (entry['latitude'] != null && entry['longitude'] != null) {
         try {
-          address = await getAddressFromLatLong(entry['latitude'], entry['longitude']);
+          address = await getAddressFromLatLong(
+            entry['latitude'], 
+            entry['longitude']
+          );
           print('Generated address: $address');
         } catch (e) {
           print('Error generating address: $e');
         }
       }
 
-      final payload = {
-        'user_id': userId,
+      // Prepare entry data for local storage
+      final entryData = {
+        'local_id': _nextLocalId++,
+        'supabase_id': null, // Will be set after sync
         'title': entry['title'] ?? '',
         'description': entry['description'] ?? '',
-        'photos': uploadedUrls,
+        'local_photos': images?.map((f) => f.path).toList() ?? [],
+        'photos': <String>[], // Remote URLs after sync
         'latitude': entry['latitude'] ?? 0.0,
         'longitude': entry['longitude'] ?? 0.0,
         'address': address,
         'date_time': entry['date_time'] ?? DateTime.now().toIso8601String(),
         'tags': tags,
+        'created_at': DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
+        'needs_sync': true,
+        'sync_status': 'pending', // pending, synced, modified, error
+        'last_sync_attempt': null,
       };
-      print('Inserting payload to Supabase: $payload');
 
-      final inserted = await supabaseService.insertEntry(payload);
-      print('Raw insert result: $inserted');
-      if (inserted == null) {
-        print('Insert failed, no data returned - check RLS policies or schema');
-        throw Exception('Failed to save entry to Supabase. Check database permissions.');
-      }
-
-      await fetchFromSupabase();
-      return;
+      // Save to local storage
+      final key = 'entry_${entryData['local_id']}';
+      await _box.put(key, entryData);
+      print('Entry saved locally with key: $key');
+      
+      // Update pending changes flag
+      _hasPendingChanges = true;
+      
+      // Reload entries to update state
+      await _loadLocalEntries();
+      
+      // Try to sync immediately if online
+      _syncToSupabase();
+    } catch (e) {
+      print('Error adding entry: $e');
+      throw Exception('Failed to save entry locally: $e');
     }
-
-    print('Offline, storing locally');
-    entry['synced'] = false;
-    entry['local_photos'] = images?.map((f) => f.path).toList() ?? [];
-    entry['photos'] = <String>[];
-    entry['tags'] = <String>[];
-    entry['address'] = 'Unknown location';
-    await _box.add(entry);
-    _updateState();
   }
 
-  Future<void> updateEntry(
-    int index,
-    Map<String, dynamic> entry, {
-    List<File>? images,
-    List<String>? existingPhotos,
-  }) async {
-    final supabaseService = ref.read(supabaseServiceProvider);
-    final conn = await Connectivity().checkConnectivity();
+Future<void> updateEntry(
+  int index,
+  Map<String, dynamic> entry, {
+  List<File>? images,
+  List<String>? existingPhotos,
+}) async {
+  try {
+    if (index >= state.length) {
+      throw Exception('Invalid entry index');
+    }
 
-    if (!conn.contains(ConnectivityResult.none)) {
-      print('Online, updating directly in Supabase');
-      final userId = Supabase.instance.client.auth.currentUser?.id;
-      if (userId == null) {
-        print('User not authenticated, cannot update');
-        throw Exception('User not authenticated. Please log in.');
-      }
+    print('Updating entry at index $index');
+    final currentEntry = state[index];
+    final localId = currentEntry['local_id'];
 
-      final uploadedUrls = <String>[...(existingPhotos ?? [])];
-      List<String> tags = (entry['tags'] as List<dynamic>?)?.cast<String>() ?? [];
-      String address = entry['address'] ?? 'Unknown location';
-
-      if (images != null && images.isNotEmpty) {
-        try {
-          tags = await getImageTags(images);
-        } catch (e) {
-          print('Tagging failed: $e');
-          throw e;
-        }
-        for (final img in images) {
-          try {
-            final url = await supabaseService.uploadPhoto(img);
-            uploadedUrls.add(url);
-            print('Photo uploaded: $url');
-          } catch (e) {
-            print('Error uploading photo ${img.path}: $e');
-          }
-        }
-      }
-
-      if (entry['latitude'] != null && entry['longitude'] != null) {
-        try {
-          address = await getAddressFromLatLong(entry['latitude'], entry['longitude']);
-          print('Generated address: $address');
-        } catch (e) {
-          print('Error generating address: $e');
-        }
-      }
-
-      final payload = {
-        'user_id': userId,
-        'title': entry['title'] ?? '',
-        'description': entry['description'] ?? '',
-        'photos': uploadedUrls,
-        'latitude': entry['latitude'] ?? 0.0,
-        'longitude': entry['longitude'] ?? 0.0,
-        'address': address,
-        'date_time': entry['date_time'] ?? DateTime.now().toIso8601String(),
-        'tags': tags,
-      };
-      print('Updating payload in Supabase: $payload');
-
+    // Generate new tags if new images are provided
+    List<String> tags = (entry['tags'] as List<dynamic>?)?.cast<String>() ?? 
+                       (currentEntry['tags'] as List<dynamic>?)?.cast<String>() ?? [];
+    
+    if (images != null && images.isNotEmpty) {
       try {
-        final res = await Supabase.instance.client
-            .from('journal_entries')
-            .update(payload)
-            .eq('id', entry['id'])
-            .select()
-            .maybeSingle();
-        print('Update response: $res');
-        if (res == null) {
-          print('Update failed, no data returned - check RLS policies or schema');
-          throw Exception('Failed to update entry in Supabase. Check database permissions.');
-        }
+        tags = await getImageTags(images);
       } catch (e) {
-        print('Update error: $e');
-        throw e;
+        print('Tagging failed: $e');
+        // Keep existing tags if new tagging fails
+      }
+    }
+
+    // Generate address if coordinates changed
+    String address = entry['address'] ?? currentEntry['address'] ?? 'Unknown location';
+    if (entry['latitude'] != null && entry['longitude'] != null) {
+      try {
+        address = await getAddressFromLatLong(
+          entry['latitude'], 
+          entry['longitude']
+        );
+        print('Generated address: $address');
+      } catch (e) {
+        print('Error generating address: $e');
+      }
+    }
+
+    // Handle photos properly - use the photos as they are sent from AddEntryScreen
+    // Separate local photos (file paths) from remote photos (URLs)
+    final List<String> localPhotoPaths = [];
+    final List<String> remotePhotoUrls = [];
+    
+    // Process the display photos from the edit screen
+    if (images != null) {
+      for (final file in images) {
+        localPhotoPaths.add(file.path);
+      }
+    }
+    
+    // Add any existing remote URLs that were passed
+    if (existingPhotos != null) {
+      for (final photo in existingPhotos) {
+        if (photo.startsWith('http')) {
+          remotePhotoUrls.add(photo);
+        } else {
+          // This is a local photo path
+          if (!localPhotoPaths.contains(photo)) {
+            localPhotoPaths.add(photo);
+          }
+        }
+      }
+    }
+
+    // Prepare updated entry data
+    final updatedEntry = {
+      'local_id': localId,
+      'supabase_id': currentEntry['supabase_id'],
+      'title': entry['title'] ?? currentEntry['title'] ?? '',
+      'description': entry['description'] ?? currentEntry['description'] ?? '',
+      'local_photos': localPhotoPaths,
+      'photos': remotePhotoUrls,
+      'latitude': entry['latitude'] ?? currentEntry['latitude'] ?? 0.0,
+      'longitude': entry['longitude'] ?? currentEntry['longitude'] ?? 0.0,
+      'address': address,
+      'date_time': entry['date_time'] ?? currentEntry['date_time'] ?? DateTime.now().toIso8601String(),
+      'tags': tags,
+      'created_at': currentEntry['created_at'] ?? DateTime.now().toIso8601String(),
+      'updated_at': DateTime.now().toIso8601String(),
+      'needs_sync': true,
+      'sync_status': currentEntry['supabase_id'] != null ? 'modified' : 'pending',
+      'last_sync_attempt': currentEntry['last_sync_attempt'],
+    };
+
+    // Update in local storage
+    final key = 'entry_$localId';
+    await _box.put(key, updatedEntry);
+    print('Entry updated locally with key: $key');
+    
+    // Update pending changes flag
+    _hasPendingChanges = true;
+    
+    // Reload entries to update state
+    await _loadLocalEntries();
+    
+    // Try to sync immediately if online
+    _syncToSupabase();
+  } catch (e) {
+    print('Error updating entry: $e');
+    throw Exception('Failed to update entry locally: $e');
+  }
+}
+  Future<void> deleteEntryAt(int index) async {
+    try {
+      if (index >= state.length) {
+        throw Exception('Invalid entry index');
       }
 
-      await fetchFromSupabase();
+      final entry = state[index];
+      final localId = entry['local_id'];
+      final supabaseId = entry['supabase_id'];
+      
+      // Delete associated local photos
+      final localPhotos = (entry['local_photos'] as List<dynamic>?)?.cast<String>() ?? [];
+      for (final photoPath in localPhotos) {
+        try {
+          final file = File(photoPath);
+          if (await file.exists()) {
+            await file.delete();
+            print('Deleted local photo: $photoPath');
+          }
+        } catch (e) {
+          print('Error deleting photo $photoPath: $e');
+        }
+      }
+
+      // If it exists in Supabase, mark for deletion instead of removing locally
+      if (supabaseId != null) {
+        final deletionEntry = {
+          ...entry,
+          'needs_sync': true,
+          'sync_status': 'delete_pending',
+          'updated_at': DateTime.now().toIso8601String(),
+        };
+        
+        final key = 'entry_$localId';
+        await _box.put(key, deletionEntry);
+        print('Marked entry for deletion: $key');
+        
+        _hasPendingChanges = true;
+        _syncToSupabase(); // Try to delete from Supabase immediately
+      } else {
+        // Remove from local storage completely (never synced)
+        final key = 'entry_$localId';
+        await _box.delete(key);
+        print('Deleted local-only entry with key: $key');
+      }
+      
+      // Reload entries to update state
+      await _loadLocalEntries();
+    } catch (e) {
+      print('Error deleting entry: $e');
+      throw Exception('Failed to delete entry: $e');
+    }
+  }
+
+  // Sync local changes to Supabase
+  Future<void> _syncToSupabase() async {
+    final conn = await Connectivity().checkConnectivity();
+    if (conn.contains(ConnectivityResult.none)) {
+      print('Offline - skipping sync');
       return;
     }
 
-    print('Offline, updating locally');
-    entry['synced'] = false;
-    entry['local_photos'] = images?.map((f) => f.path).toList() ?? (entry['local_photos'] as List<dynamic>?)?.cast<String>() ?? [];
-    entry['photos'] = existingPhotos ?? (entry['photos'] as List<dynamic>?)?.cast<String>() ?? [];
-    entry['tags'] = (entry['tags'] as List<dynamic>?)?.cast<String>() ?? [];
-    entry['address'] = entry['address'] ?? 'Unknown location';
-
-    final localKeys = _box.keys.toList()..sort();
-    if (index < localKeys.length && entry['synced'] == false) {
-      final keyToUpdate = localKeys[index];
-      await _box.put(keyToUpdate, entry);
-      print('Updated local entry at key: $keyToUpdate');
-    } else {
-      final id = entry['id'];
-      if (id != null) {
-        entry['sync_action'] = 'update'; // Flag for sync to use update instead of insert
-      }
-      await _box.add(entry);
-      print('Added updated entry to local storage for sync');
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) {
+      print('User not authenticated - skipping sync');
+      return;
     }
-    _updateState();
-  }
 
-  Future<void> _syncPendingEntries() async {
-    print('Starting sync of pending entries');
+    print('Starting sync to Supabase');
     final supabaseService = ref.read(supabaseServiceProvider);
-    final pendingKeys = _box.keys.toList();
-    for (final key in pendingKeys) {
-      final entry = Map<String, dynamic>.from(_box.get(key) ?? {});
-      if (entry['synced'] == true) continue;
-
-      final userId = Supabase.instance.client.auth.currentUser?.id;
-      if (userId == null) {
-        print('User not authenticated, skipping sync');
-        continue;
-      }
-
-      final localPhotos = (entry['local_photos'] as List<dynamic>?)?.cast<String>() ?? [];
-      final uploadedUrls = (entry['photos'] as List<dynamic>?)?.cast<String>() ?? [];
-      final files = <File>[];
-
+    
+    // Get all entries that need sync
+    final allEntries = _box.values.map((e) => Map<String, dynamic>.from(e)).toList();
+    final entriesToSync = allEntries.where((e) => e['needs_sync'] == true).toList();
+    
+    for (final entry in entriesToSync) {
       try {
-        for (final p in localPhotos) {
-          final f = File(p);
-          if (await f.exists()) {
-            files.add(f);
-          } else {
-            print('Local photo not found: $p');
+        final localId = entry['local_id'];
+        final key = 'entry_$localId';
+        
+        if (entry['sync_status'] == 'delete_pending') {
+          // Delete from Supabase
+          if (entry['supabase_id'] != null) {
+            await Supabase.instance.client
+                .from('journal_entries')
+                .delete()
+                .eq('id', entry['supabase_id']);
+            print('Deleted entry from Supabase: ${entry['supabase_id']}');
           }
+          
+          // Remove from local storage after successful deletion
+          await _box.delete(key);
+          continue;
         }
-
-        List<String> tags = (entry['tags'] as List<dynamic>?)?.cast<String>() ?? [];
-        try {
-          if (files.isNotEmpty) {
-            tags = await getImageTags(files);
-          }
-        } catch (e) {
-          print('Tagging failed during sync: $e');
-          throw e;
-        }
-
-        for (final f in files) {
-          final url = await supabaseService.uploadPhoto(f);
-          uploadedUrls.add(url);
-          print('Photo uploaded: $url');
-        }
-
-        String address = entry['address'] ?? 'Unknown location';
-        if (entry['latitude'] != null && entry['longitude'] != null) {
+        
+        // Upload local photos to Supabase
+        final localPhotos = (entry['local_photos'] as List<dynamic>?)?.cast<String>() ?? [];
+        final uploadedUrls = <String>[...(entry['photos'] as List<dynamic>?)?.cast<String>() ?? []];
+        
+        for (final photoPath in localPhotos) {
           try {
-            address = await getAddressFromLatLong(entry['latitude'], entry['longitude']);
-            print('Generated address: $address');
+            final file = File(photoPath);
+            if (await file.exists()) {
+              final url = await supabaseService.uploadPhoto(file);
+              uploadedUrls.add(url);
+              print('Photo uploaded: $url');
+            }
           } catch (e) {
-            print('Error generating address: $e');
+            print('Error uploading photo $photoPath: $e');
           }
         }
 
+        // Prepare payload for Supabase
         final payload = {
           'user_id': userId,
           'title': entry['title'] ?? '',
@@ -377,92 +473,158 @@ class EntriesNotifier extends StateNotifier<List<Map<String, dynamic>>> {
           'photos': uploadedUrls,
           'latitude': entry['latitude'] ?? 0.0,
           'longitude': entry['longitude'] ?? 0.0,
-          'address': address,
+          'address': entry['address'] ?? 'Unknown location',
           'date_time': entry['date_time'] ?? DateTime.now().toIso8601String(),
-          'tags': tags,
+          'tags': entry['tags'] ?? [],
         };
-        print('Syncing payload to Supabase: $payload');
 
-        Map<String, dynamic>? inserted;
-        if (entry['sync_action'] == 'update' && entry['id'] != null) {
-          print('Performing update sync for entry with ID: ${entry['id']}');
-          final res = await Supabase.instance.client
+        Map<String, dynamic>? result;
+        
+        if (entry['supabase_id'] != null && entry['sync_status'] == 'modified') {
+          // Update existing entry
+          result = await Supabase.instance.client
               .from('journal_entries')
               .update(payload)
-              .eq('id', entry['id'])
+              .eq('id', entry['supabase_id'])
               .select()
               .maybeSingle();
-          print('Update sync response: $res');
-          inserted = res;
+          print('Updated entry in Supabase: ${entry['supabase_id']}');
         } else {
-          inserted = await supabaseService.insertEntry(payload);
-          print('Raw sync insert result: $inserted');
+          // Insert new entry
+          result = await supabaseService.insertEntry(payload);
+          print('Inserted new entry to Supabase');
         }
 
-        if (inserted == null) {
-          print('Sync failed');
-          continue;
+        if (result != null) {
+          // Update local entry with sync info
+          final syncedEntry = {
+            ...entry,
+            'supabase_id': result['id'],
+            'photos': uploadedUrls,
+            'needs_sync': false,
+            'sync_status': 'synced',
+            'last_sync_attempt': DateTime.now().toIso8601String(),
+          };
+          
+          await _box.put(key, syncedEntry);
+          print('Updated local entry after successful sync: $key');
         }
-
-        await _box.delete(key);
-        print('Deleted local entry after successful sync');
+        
       } catch (e) {
-        print('Sync error for entry $key: $e');
+        print('Sync error for entry ${entry['local_id']}: $e');
+        
+        // Mark sync attempt
+        final updatedEntry = {
+          ...entry,
+          'sync_status': 'error',
+          'last_sync_attempt': DateTime.now().toIso8601String(),
+        };
+        
+        final key = 'entry_${entry['local_id']}';
+        await _box.put(key, updatedEntry);
       }
     }
-
-    await fetchFromSupabase();
-    _updateState();
+    
+    // Reload entries and update sync status
+    await _loadLocalEntries();
+    print('Sync to Supabase completed');
   }
 
+  // Fetch from Supabase and merge with local (for initial sync)
   Future<void> fetchFromSupabase() async {
-    final supabaseService = ref.read(supabaseServiceProvider);
     final userId = Supabase.instance.client.auth.currentUser?.id;
     if (userId == null) {
-      print('User not authenticated, cannot fetch');
+      print('User not authenticated, cannot fetch from Supabase');
+      await _loadLocalEntries(); // Still load local entries
       return;
     }
 
     try {
+      final supabaseService = ref.read(supabaseServiceProvider);
       final remoteEntries = await supabaseService.fetchEntriesForUser(userId);
-      print('Fetched raw remote entries: $remoteEntries');
-      _remoteEntries = remoteEntries.map((e) {
-        final r = Map<String, dynamic>.from(e);
-        r['synced'] = true;
-        return r;
-      }).toList();
-      _updateState();
+      print('Fetched ${remoteEntries.length} entries from Supabase');
+      
+      // Merge with local entries (avoid duplicates)
+      for (final remoteEntry in remoteEntries) {
+        final supabaseId = remoteEntry['id'];
+        
+        // Check if we already have this entry locally
+        final existingLocal = _box.values
+            .map((e) => Map<String, dynamic>.from(e))
+            .where((e) => e['supabase_id'] == supabaseId)
+            .firstOrNull;
+        
+        if (existingLocal == null) {
+          // Add new entry from Supabase
+          final localEntry = {
+            'local_id': _nextLocalId++,
+            'supabase_id': supabaseId,
+            'title': remoteEntry['title'] ?? '',
+            'description': remoteEntry['description'] ?? '',
+            'local_photos': <String>[],
+            'photos': (remoteEntry['photos'] as List<dynamic>?)?.cast<String>() ?? [],
+            'latitude': remoteEntry['latitude'] ?? 0.0,
+            'longitude': remoteEntry['longitude'] ?? 0.0,
+            'address': remoteEntry['address'] ?? 'Unknown location',
+            'date_time': remoteEntry['date_time'] ?? DateTime.now().toIso8601String(),
+            'tags': (remoteEntry['tags'] as List<dynamic>?)?.cast<String>() ?? [],
+            'created_at': remoteEntry['created_at'] ?? DateTime.now().toIso8601String(),
+            'updated_at': remoteEntry['updated_at'] ?? DateTime.now().toIso8601String(),
+            'needs_sync': false,
+            'sync_status': 'synced',
+            'last_sync_attempt': DateTime.now().toIso8601String(),
+          };
+          
+          final key = 'entry_${localEntry['local_id']}';
+          await _box.put(key, localEntry);
+          print('Added remote entry to local storage: $key');
+        }
+      }
+      
+      await _loadLocalEntries();
     } catch (e) {
-      print('Fetch error: $e');
+      print('Fetch error from Supabase: $e');
+      await _loadLocalEntries(); // Still load local entries
     }
   }
 
-  Future<void> deleteEntryAt(int index) async {
-    if (index >= state.length) return;
-    final entry = state[index];
+  // Search entries by title, description, tags, address
+  List<Map<String, dynamic>> searchEntries(String query) {
+    if (query.isEmpty) return state;
+    
+    final lowerQuery = query.toLowerCase();
+    return state.where((entry) {
+      // Skip entries marked for deletion
+      if (entry['sync_status'] == 'delete_pending') return false;
+      
+      final title = (entry['title'] ?? '').toString().toLowerCase();
+      final description = (entry['description'] ?? '').toString().toLowerCase();
+      final address = (entry['address'] ?? '').toString().toLowerCase();
+      final tags = (entry['tags'] as List<dynamic>?)?.cast<String>() ?? [];
+      final tagString = tags.join(' ').toLowerCase();
+      final dateStr = (entry['date_time'] as String?)?.split('T').first.toLowerCase() ?? '';
+      
+      return title.contains(lowerQuery) || 
+             description.contains(lowerQuery) || 
+             address.contains(lowerQuery) ||
+             tagString.contains(lowerQuery) ||
+             dateStr.contains(lowerQuery);
+    }).toList();
+  }
 
-    if (entry['synced'] == false) {
-      final localKeys = _box.keys.toList()..sort();
-      if (index < localKeys.length) {
-        final keyToDelete = localKeys[index];
-        await _box.delete(keyToDelete);
-        print('Deleted local unsynced entry');
-      }
-    } else {
-      final remoteId = entry['id'];
-      try {
-        await Supabase.instance.client
-            .from('journal_entries')
-            .delete()
-            .eq('id', remoteId);
-        print('Deleted remote entry with ID: $remoteId');
-      } catch (e) {
-        print('Delete error from Supabase: $e');
-      }
+  // Get entries count (excluding deleted ones)
+  int get entriesCount => state.where((e) => e['sync_status'] != 'delete_pending').length;
+
+  // Get entry by local ID
+  Map<String, dynamic>? getEntryByLocalId(int localId) {
+    try {
+      final key = 'entry_$localId';
+      final entry = _box.get(key);
+      return entry != null ? Map<String, dynamic>.from(entry) : null;
+    } catch (e) {
+      print('Error getting entry by local ID $localId: $e');
+      return null;
     }
-
-    await fetchFromSupabase();
-    _updateState();
   }
 
   @override
@@ -471,3 +633,6 @@ class EntriesNotifier extends StateNotifier<List<Map<String, dynamic>>> {
     super.dispose();
   }
 }
+
+
+

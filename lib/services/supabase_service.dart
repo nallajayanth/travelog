@@ -1,4 +1,3 @@
-
 import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
@@ -59,6 +58,25 @@ class SupabaseService {
     } catch (e) {
       print('Fetch error: $e');
       return [];
+    }
+  }
+
+  // in SupabaseService
+  Future<Map<String, dynamic>?> updateEntry(
+    String id,
+    Map<String, dynamic> data,
+  ) async {
+    try {
+      final res = await client
+          .from('journal_entries')
+          .update(data)
+          .eq('id', id)
+          .select()
+          .maybeSingle();
+      return res != null ? Map<String, dynamic>.from(res) : null;
+    } catch (e) {
+      print('Update error: $e');
+      return null;
     }
   }
 }
