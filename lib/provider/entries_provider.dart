@@ -1,3 +1,5 @@
+
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -7,14 +9,15 @@ import 'package:hive/hive.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:geocoding/geocoding.dart';
+import 'package:path_provider/path_provider.dart';
 import '../services/supabase_service.dart';
 
 final supabaseServiceProvider = Provider((ref) => SupabaseService());
 
 final entriesNotifierProvider =
     StateNotifierProvider<EntriesNotifier, List<Map<String, dynamic>>>(
-      (ref) => EntriesNotifier(ref),
-    );
+  (ref) => EntriesNotifier(ref),
+);
 
 Future<String> getAddressFromLatLong(double lat, double long) async {
   try {
@@ -93,11 +96,11 @@ Future<List<String>> getImageTags(List<File> images) async {
       return result;
     } else {
       print('Vision API error: ${response.statusCode} ${response.body}');
-      return []; // Return empty list instead of throwing
+      return [];
     }
   } catch (e) {
     print('Error calling Vision API: $e');
-    return []; // Return empty list instead of throwing
+    return [];
   }
 }
 
@@ -167,6 +170,14 @@ class EntriesNotifier extends StateNotifier<List<Map<String, dynamic>>> {
                   DateTime.tryParse(b['date_time'] ?? '') ?? DateTime.now();
               return bDateTime.compareTo(aDateTime); // Most recent first
             });
+
+      // Add all_photos for display, combining local and remote photos
+      for (var e in entries) {
+        e['all_photos'] = [
+          ...(e['local_photos'] as List<dynamic>?)?.cast<String>() ?? [],
+          ...(e['photos'] as List<dynamic>?)?.cast<String>() ?? [],
+        ];
+      }
 
       // Check if there are pending changes
       _hasPendingChanges = entries.any(
@@ -251,11 +262,31 @@ class EntriesNotifier extends StateNotifier<List<Map<String, dynamic>>> {
     try {
       print('Adding new entry to local storage');
 
+      // Copy images to persistent storage
+      List<String> localPhotoPaths = [];
+      if (images != null && images.isNotEmpty) {
+        final dir = await getApplicationDocumentsDirectory();
+        final imagesDir = Directory('${dir.path}/journal_images');
+        if (!await imagesDir.exists()) {
+          await imagesDir.create(recursive: true);
+        }
+        for (var img in images) {
+          final fileName =
+              '${DateTime.now().millisecondsSinceEpoch}_${img.path.split('/').last}';
+          final newPath = '${imagesDir.path}/$fileName';
+          await img.copy(newPath);
+          localPhotoPaths.add(newPath);
+          print('Copied image to persistent path: $newPath');
+        }
+      }
+
       // Generate tags from images if provided
       List<String> tags = [];
-      if (images != null && images.isNotEmpty) {
+      if (localPhotoPaths.isNotEmpty) {
         try {
-          tags = await getImageTags(images);
+          final persistentImages =
+              localPhotoPaths.map((path) => File(path)).toList();
+          tags = await getImageTags(persistentImages);
         } catch (e) {
           print('Tagging failed: $e');
           // Continue without tags rather than failing
@@ -283,8 +314,9 @@ class EntriesNotifier extends StateNotifier<List<Map<String, dynamic>>> {
         'user_id': userId, // Store user ID with entry
         'title': entry['title'] ?? '',
         'description': entry['description'] ?? '',
-        'local_photos': images?.map((f) => f.path).toList() ?? [],
+        'local_photos': localPhotoPaths,
         'photos': <String>[], // Remote URLs after sync
+        'all_photos': localPhotoPaths, // Initialize with local photos for display
         'latitude': entry['latitude'] ?? 0.0,
         'longitude': entry['longitude'] ?? 0.0,
         'address': address,
@@ -316,7 +348,6 @@ class EntriesNotifier extends StateNotifier<List<Map<String, dynamic>>> {
     }
   }
 
-  // New method with proper photo handling for updates
   Future<void> updateEntryFixed(
     int index,
     Map<String, dynamic> entry, {
@@ -338,15 +369,35 @@ class EntriesNotifier extends StateNotifier<List<Map<String, dynamic>>> {
       final currentEntry = state[index];
       final localId = currentEntry['local_id'];
 
+      // Copy new images to persistent storage
+      List<String> newLocalPhotoPaths = [];
+      if (newImages != null && newImages.isNotEmpty) {
+        final dir = await getApplicationDocumentsDirectory();
+        final imagesDir = Directory('${dir.path}/journal_images');
+        if (!await imagesDir.exists()) {
+          await imagesDir.create(recursive: true);
+        }
+        for (var img in newImages) {
+          final fileName =
+              '${DateTime.now().millisecondsSinceEpoch}_${img.path.split('/').last}';
+          final newPath = '${imagesDir.path}/$fileName';
+          await img.copy(newPath);
+          newLocalPhotoPaths.add(newPath);
+          print('Copied new image to persistent path: $newPath');
+        }
+      }
+
       // Generate new tags if new images are provided
       List<String> tags =
           (entry['tags'] as List<dynamic>?)?.cast<String>() ??
           (currentEntry['tags'] as List<dynamic>?)?.cast<String>() ??
           [];
 
-      if (newImages != null && newImages.isNotEmpty) {
+      if (newLocalPhotoPaths.isNotEmpty) {
         try {
-          final newTags = await getImageTags(newImages);
+          final persistentNewImages =
+              newLocalPhotoPaths.map((path) => File(path)).toList();
+          final newTags = await getImageTags(persistentNewImages);
           final tagSet = tags.toSet();
           tagSet.addAll(newTags);
           tags = tagSet.toList();
@@ -379,19 +430,16 @@ class EntriesNotifier extends StateNotifier<List<Map<String, dynamic>>> {
           keptPhotos?.where((p) => p.startsWith('http')).toList() ??
           List.from(currentEntry['photos'] ?? []);
 
-      // Add new local photos if provided
-      if (newImages != null) {
-        for (final file in newImages) {
-          if (!localPhotoPaths.contains(file.path)) {
-            localPhotoPaths.add(file.path);
-          }
-        }
-      }
+      // Add new local photo paths
+      localPhotoPaths.addAll(newLocalPhotoPaths);
+
+      // Combine all photos for display
+      final allPhotos = [...localPhotoPaths, ...remotePhotoUrls];
 
       // If entry has 'all_photos' from UI, merge them
       if (entry['all_photos'] != null) {
-        final allPhotos = entry['all_photos'] as List<String>;
-        for (final photo in allPhotos) {
+        final uiPhotos = entry['all_photos'] as List<String>;
+        for (final photo in uiPhotos) {
           if (photo.startsWith('http')) {
             if (!remotePhotoUrls.contains(photo)) {
               remotePhotoUrls.add(photo);
@@ -402,6 +450,10 @@ class EntriesNotifier extends StateNotifier<List<Map<String, dynamic>>> {
             }
           }
         }
+        // Update all_photos with UI-provided photos
+        allPhotos
+          ..clear()
+          ..addAll([...localPhotoPaths, ...remotePhotoUrls]);
       }
 
       // Delete removed local photos
@@ -432,6 +484,7 @@ class EntriesNotifier extends StateNotifier<List<Map<String, dynamic>>> {
             entry['description'] ?? currentEntry['description'] ?? '',
         'local_photos': localPhotoPaths,
         'photos': remotePhotoUrls,
+        'all_photos': allPhotos, // Ensure all_photos is updated
         'latitude': entry['latitude'] ?? currentEntry['latitude'] ?? 0.0,
         'longitude': entry['longitude'] ?? currentEntry['longitude'] ?? 0.0,
         'address': address,
@@ -683,6 +736,7 @@ class EntriesNotifier extends StateNotifier<List<Map<String, dynamic>>> {
             'supabase_id': result['id'],
             'photos': uploadedUrls,
             'local_photos': [], // Clear local photos to prevent duplicates
+            'all_photos': uploadedUrls, // Update all_photos for display
             'tags': tags,
             'needs_sync': false,
             'sync_status': 'synced',
@@ -747,6 +801,8 @@ class EntriesNotifier extends StateNotifier<List<Map<String, dynamic>>> {
             'local_photos': <String>[],
             'photos':
                 (remoteEntry['photos'] as List<dynamic>?)?.cast<String>() ?? [],
+            'all_photos':
+                (remoteEntry['photos'] as List<dynamic>?)?.cast<String>() ?? [],
             'latitude': remoteEntry['latitude'] ?? 0.0,
             'longitude': remoteEntry['longitude'] ?? 0.0,
             'address': remoteEntry['address'] ?? 'Unknown location',
@@ -810,7 +866,16 @@ class EntriesNotifier extends StateNotifier<List<Map<String, dynamic>>> {
     try {
       final key = 'entry_$localId';
       final entry = _box.get(key);
-      return entry != null ? Map<String, dynamic>.from(entry) : null;
+      if (entry != null) {
+        final entryMap = Map<String, dynamic>.from(entry);
+        // Ensure all_photos is included when fetching by ID
+        entryMap['all_photos'] = [
+          ...(entryMap['local_photos'] as List<dynamic>?)?.cast<String>() ?? [],
+          ...(entryMap['photos'] as List<dynamic>?)?.cast<String>() ?? [],
+        ];
+        return entryMap;
+      }
+      return null;
     } catch (e) {
       print('Error getting entry by local ID $localId: $e');
       return null;

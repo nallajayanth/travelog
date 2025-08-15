@@ -1,3 +1,4 @@
+
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -18,11 +19,9 @@ class EntryDetailScreen extends ConsumerWidget {
       return const Scaffold(body: Center(child: Text('Entry not found')));
     }
     final entry = entries[index];
-    final photos = (entry['photos'] != null)
-        ? List<String>.from(entry['photos'])
-        : <String>[];
-    final localPhotos = (entry['local_photos'] != null)
-        ? List<String>.from(entry['local_photos'])
+    // Use all_photos to combine local and remote photos
+    final allPhotos = (entry['all_photos'] != null)
+        ? List<String>.from(entry['all_photos'])
         : <String>[];
     final tags = List<String>.from(entry['tags'] ?? []);
     final DateTime dateTime = DateTime.parse(entry['date_time']);
@@ -30,13 +29,12 @@ class EntryDetailScreen extends ConsumerWidget {
 
     // Auto-slide controller
     late PageController pageController;
-    if (photos.isNotEmpty || localPhotos.isNotEmpty) {
+    if (allPhotos.isNotEmpty) {
       pageController = PageController(viewportFraction: 0.9);
       Timer.periodic(const Duration(seconds: 3), (timer) {
         if (pageController.hasClients) {
           int nextPage = pageController.page!.round() + 1;
-          if (nextPage <
-              (photos.isNotEmpty ? photos.length : localPhotos.length)) {
+          if (nextPage < allPhotos.length) {
             pageController.animateToPage(
               nextPage,
               duration: const Duration(milliseconds: 300),
@@ -137,14 +135,12 @@ class EntryDetailScreen extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (photos.isNotEmpty || localPhotos.isNotEmpty)
+            if (allPhotos.isNotEmpty)
               SizedBox(
                 height: 300,
                 child: PageView.builder(
                   controller: pageController,
-                  itemCount: photos.isNotEmpty
-                      ? photos.length
-                      : localPhotos.length,
+                  itemCount: allPhotos.length,
                   itemBuilder: (context, index) {
                     return Padding(
                       padding: const EdgeInsets.symmetric(
@@ -155,9 +151,9 @@ class EntryDetailScreen extends ConsumerWidget {
                         borderRadius: BorderRadius.circular(20),
                         child: Hero(
                           tag: 'entry_image_$index',
-                          child: photos.isNotEmpty
+                          child: allPhotos[index].startsWith('http')
                               ? CachedNetworkImage(
-                                  imageUrl: photos[index],
+                                  imageUrl: allPhotos[index],
                                   fit: BoxFit.cover,
                                   placeholder: (context, url) =>
                                       Container(color: Colors.grey[200]),
@@ -165,8 +161,10 @@ class EntryDetailScreen extends ConsumerWidget {
                                       const Icon(Icons.broken_image, size: 64),
                                 )
                               : Image.file(
-                                  File(localPhotos[index]),
-                                  fit: BoxFit.contain,
+                                  File(allPhotos[index]),
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      const Icon(Icons.broken_image, size: 64),
                                 ),
                         ),
                       ),
@@ -207,7 +205,7 @@ class EntryDetailScreen extends ConsumerWidget {
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        '${onlyDate ?? 'Unknown date'}',
+                        onlyDate,
                         style: TextStyle(fontSize: 16, color: Colors.grey[600]),
                       ),
                       const SizedBox(width: 20),
@@ -219,7 +217,7 @@ class EntryDetailScreen extends ConsumerWidget {
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          '${entry['address'] ?? 'Unknown location'}',
+                          entry['address'] ?? 'Unknown location',
                           style: TextStyle(
                             fontSize: 16,
                             color: Colors.grey[600],
@@ -260,7 +258,7 @@ class EntryDetailScreen extends ConsumerWidget {
                             color = Colors.purple;
                             break;
                           default:
-                            color = const Color.fromARGB(0, 247, 245, 246);
+                            color = const Color.fromARGB(255, 247, 245, 246);
                         }
                         return Chip(
                           label: Text(
@@ -287,8 +285,6 @@ class EntryDetailScreen extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(height: 20),
-
-                  const SizedBox(height: 20),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
@@ -304,7 +300,7 @@ class EntryDetailScreen extends ConsumerWidget {
                         icon: const Icon(Icons.edit, size: 18),
                         label: const Text('Edit Entry'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Color(0xFF3498DB),
+                          backgroundColor: const Color(0xFF3498DB),
                           foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(25),
@@ -315,13 +311,12 @@ class EntryDetailScreen extends ConsumerWidget {
                           ),
                         ),
                       ),
-
                       ElevatedButton.icon(
                         onPressed: _confirmAndDeleteEntry,
                         icon: const Icon(Icons.delete, size: 18),
                         label: const Text('Delete'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Color(0xFFE74C3C),
+                          backgroundColor: const Color(0xFFE74C3C),
                           foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(25),
@@ -335,7 +330,6 @@ class EntryDetailScreen extends ConsumerWidget {
                     ],
                   ),
                   const SizedBox(height: 20),
-                 
                 ],
               ),
             ),
