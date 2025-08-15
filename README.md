@@ -1,7 +1,7 @@
 # 🌍 Travlog – Your Personal Travel Journal App
 
 > ✈️ A cross-platform **offline-first** mobile application to create, manage, and relive your travel memories.  
-Built with **Flutter**, **Riverpod**, and **Supabase**, designed for seamless performance whether you’re online or off.
+Built with **Flutter**, **Riverpod**, and **Supabase**, designed for seamless performance whether you’re online or offline.
 
 ---
 
@@ -54,6 +54,18 @@ All with **offline-first** capabilities – so your adventures are saved even wi
 | **Image Handling** | image_picker, cached_network_image |
 | **Geolocation** | geolocator, geocoding |
 | **Connectivity** | connectivity_plus |
+
+---
+
+## 📹 Demo Video
+🎥 Watch the full walkthrough on Loom:  
+[**Travlog App Demo – Click Here**](https://www.loom.com/share/01fb97c5fa1a4967b476b808d59ddc6c?sid=26cdd2d0-bb12-407d-b6b9-a7d9ea6a8af4)
+
+---
+
+## 📱 Download APK
+📦 Download the latest release APK:  
+[**Travlog APK – Click to Download**](./app-release.apk)
 
 ---
 
