@@ -58,10 +58,10 @@ class SettingsScreen extends ConsumerWidget {
     final themeMode = ref.watch(themeModeProvider);
     final user = Supabase.instance.client.auth.currentUser;
     final email =
-        user?.email ?? 'nalla.jayanth3@gmail.com'; // Updated to match image
+        user?.email ?? '@unkonwn user'; // Updated to match image
     final name =
         user?.userMetadata?['full_name'] ??
-        'Jayanth Nalla'; // Updated to match image
+        'User'; // Updated to match image
     final avatarUrl =
         user?.userMetadata?['avatar_url'] ??
         'https://via.placeholder.com/50'; // Fallback avatar
@@ -113,7 +113,7 @@ class SettingsScreen extends ConsumerWidget {
                       backgroundColor: Colors.blue,
                       child: avatarUrl.contains('placeholder')
                           ? const Text(
-                              'J',
+                              '',
                               style: TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,

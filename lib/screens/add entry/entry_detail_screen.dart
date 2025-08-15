@@ -335,32 +335,7 @@ class EntryDetailScreen extends ConsumerWidget {
                     ],
                   ),
                   const SizedBox(height: 20),
-                  // Center(
-                  //   child: ElevatedButton.icon(
-                  //     onPressed: () {
-                  //       Navigator.of(context).push(
-                  //         MaterialPageRoute(
-                  //           builder: (context) =>
-                  //               AddEntryScreen(entry: entry, index: index),
-                  //         ),
-                  //       );
-                  //     },
-                  //     icon: const Icon(Icons.edit, size: 18),
-                  //     label: const Text('Edit Entry'),
-                  //     style: ElevatedButton.styleFrom(
-                  //       backgroundColor: Color(0xFF3498DB),
-                  //       foregroundColor: Colors.white,
-                  //       shape: RoundedRectangleBorder(
-                  //         borderRadius: BorderRadius.circular(25),
-                  //       ),
-                  //       padding: const EdgeInsets.symmetric(
-                  //         horizontal: 20,
-                  //         vertical: 12,
-                  //       ),
-                  //       minimumSize: const Size(250, 50),
-                  //     ),
-                  //   ),
-                  // ),
+                 
                 ],
               ),
             ),

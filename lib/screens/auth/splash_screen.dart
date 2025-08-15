@@ -23,13 +23,13 @@ class _SplashScreenState extends State<SplashScreen> {
     final session = supabase.auth.currentSession;
     await Future.delayed(const Duration(seconds: 3));
     if (session != null && session.user != null) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
-      );
+      Navigator.of(
+        context,
+      ).pushReplacement(MaterialPageRoute(builder: (_) => const HomeScreen()));
     } else {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
-      );
+      Navigator.of(
+        context,
+      ).pushReplacement(MaterialPageRoute(builder: (_) => const LoginScreen()));
     }
   }
 
@@ -45,16 +45,13 @@ class _SplashScreenState extends State<SplashScreen> {
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF1E3A8A),
-                  Color(0xFF4C1D95),
-                ],
+                colors: [Color(0xFF1E3A8A), Color(0xFF4C1D95)],
               ),
             ),
           ),
           // Overlay image for a travel-themed splash
-          Image.network(
-            'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&q=80&w=1920',
+          Image.asset(
+            'assets/img.png',
             fit: BoxFit.cover,
             color: Colors.black.withOpacity(0.2),
             colorBlendMode: BlendMode.darken,

@@ -104,14 +104,14 @@ class _LoginScreenState extends State<LoginScreen> {
         fit: StackFit.expand,
         children: [
           // Background image (faint travel-themed background for enhanced UI)
-          Image.network(
-            'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&q=80',
+          Image.asset(
+            'assets/img.png',
             fit: BoxFit.cover,
+            color: Colors.black.withOpacity(0.2),
+            colorBlendMode: BlendMode.darken,
           ),
           // Overlay for readability
-          Container(
-            color: Colors.white.withOpacity(0.7),
-          ),
+          Container(color: Colors.white.withOpacity(0.7)),
           SafeArea(
             child: Center(
               child: Padding(
@@ -131,10 +131,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     const Text(
                       'Capture your adventures and create lasting memories with our beautiful travel journal',
                       textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 18,
-                        color: Colors.black54,
-                      ),
+                      style: TextStyle(fontSize: 18, color: Colors.black54),
                     ),
                     const SizedBox(height: 48),
                     // Google Button
@@ -205,11 +202,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         child: const Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(
-                              Icons.apple,
-                              color: Colors.white,
-                              size: 28,
-                            ),
+                            Icon(Icons.apple, color: Colors.white, size: 28),
                             SizedBox(width: 12),
                             Text(
                               'Continue with Apple',
@@ -241,7 +234,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (context) => const RegistrationScreen(),
+                                    builder: (context) =>
+                                        const RegistrationScreen(),
                                   ),
                                 );
                               },
