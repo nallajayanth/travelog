@@ -65,7 +65,7 @@ All with **offline-first** capabilities – so your adventures are saved even wi
 
 ## 📱 Download APK
 📦 Download the latest release APK:  
-[**Travlog APK – Click to Download**](./app-release.apk)
+[**Travlog APK – Click to Download**](https://drive.google.com/file/d/1qUFzw0dtxI9HZGbnNSixGQbKlzPCl5Zf/view?usp=drive_link)
 
 ---
 
