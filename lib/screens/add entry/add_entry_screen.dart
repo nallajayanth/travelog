@@ -7,7 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:travlog_app/provider/entries_provider.dart';
-import 'package:uuid/uuid.dart';
+import 'package:travlog_app/services/location_service.dart'; // Add this import
 
 class AddEntryScreen extends ConsumerStatefulWidget {
   final Map<String, dynamic>? entry;
@@ -24,16 +24,15 @@ class _AddEntryScreenState extends ConsumerState<AddEntryScreen> {
   final _desc = TextEditingController();
   final _addressController = TextEditingController();
   final _picker = ImagePicker();
-  final List<String> _localPhotos = [];
+  final List<String> _newImagePaths = []; // New images from camera/gallery
   bool _saving = false;
   String? _selectedDateTime;
   String? _address;
   double? _latitude;
   double? _longitude;
-  List<String> _existingPhotos = [];
+  List<String> _keptPhotos = []; // Photos to keep (both local and remote)
   late List<String> _displayPhotos;
 
-  @override
   @override
   void initState() {
     super.initState();
@@ -48,30 +47,18 @@ class _AddEntryScreenState extends ConsumerState<AddEntryScreen> {
         widget.entry!['longitude']?.toString() ?? '',
       );
 
-      // Clear existing lists first
-      _localPhotos.clear();
-      _existingPhotos.clear();
-
-      // Populate local photos
-      final localPhotosList =
-          (widget.entry!['local_photos'] as List<dynamic>?)?.cast<String>() ??
-          [];
-      _localPhotos.addAll(localPhotosList);
-
-      // Populate existing photos (remote URLs)
-      final existingPhotosList =
-          (widget.entry!['photos'] as List<dynamic>?)?.cast<String>() ?? [];
-      _existingPhotos.addAll(existingPhotosList);
+      // Initialize kept photos with existing photos (all_photos contains both local and remote)
+      final allPhotos = (widget.entry!['all_photos'] as List<dynamic>?)?.cast<String>() ?? [];
+      _keptPhotos = List.from(allPhotos);
+      _displayPhotos = List.from(allPhotos);
     } else {
       _selectedDateTime = DateTime.now().toIso8601String();
       _address = '';
       _latitude = null;
       _longitude = null;
+      _displayPhotos = [];
     }
     _addressController.text = _address ?? '';
-
-    // Combine for display - local photos first, then remote URLs
-    _displayPhotos = [..._localPhotos, ..._existingPhotos];
   }
 
   Future<void> _pick(ImageSource src) async {
@@ -82,10 +69,12 @@ class _AddEntryScreenState extends ConsumerState<AddEntryScreen> {
       return;
     }
     final XFile? f = await _picker.pickImage(source: src, imageQuality: 80);
-    if (f != null)
+    if (f != null) {
       setState(() {
         _displayPhotos.add(f.path);
+        _newImagePaths.add(f.path); // Track new images separately
       });
+    }
   }
 
   Future<void> _getLocation() async {
@@ -123,7 +112,7 @@ class _AddEntryScreenState extends ConsumerState<AddEntryScreen> {
       final pos = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.best,
       );
-      final address = await getAddressFromLatLong(pos.latitude, pos.longitude);
+      final address = await LocationService.getAddressFromLatLong(pos.latitude, pos.longitude);
       setState(() {
         _latitude = pos.latitude;
         _longitude = pos.longitude;
@@ -178,54 +167,33 @@ class _AddEntryScreenState extends ConsumerState<AddEntryScreen> {
       ).showSnackBar(const SnackBar(content: Text('Login required to sync')));
       return;
     }
-    final id = widget.entry != null ? widget.entry!['id'] : const Uuid().v4();
 
-    // Clear and rebuild the photo lists
-    _localPhotos.clear();
-    _existingPhotos.clear();
+    // Update kept photos to match current display photos (excluding new images)
+    _keptPhotos = _displayPhotos.where((photo) => !_newImagePaths.contains(photo)).toList();
 
-    // Separate local photos from remote URLs in _displayPhotos
-    for (var photo in _displayPhotos) {
-      if (photo.startsWith('http')) {
-        _existingPhotos.add(photo);
-      } else {
-        _localPhotos.add(photo);
-      }
-    }
-
-    final Map<String, dynamic> entry = {
-      'id': id,
-      'user_id': userId,
+    final Map<String, dynamic> entryData = {
       'title': _title.text.trim(),
       'description': _desc.text.trim(),
-      'local_photos': _localPhotos,
-      'photos': _existingPhotos,
-      'tags':
-          (widget.entry != null
-              ? (widget.entry!['tags'] as List<dynamic>?)?.cast<String>()
-              : <String>[]) ??
-          [],
       'date_time': _selectedDateTime,
       'latitude': _latitude,
       'longitude': _longitude,
       'address': _address,
-      'synced': false,
     };
 
-    // Convert local photo paths to File objects
-    final files = _localPhotos.map((p) => File(p)).toList();
+    // Convert new image paths to File objects
+    final newFiles = _newImagePaths.map((p) => File(p)).toList();
 
     setState(() => _saving = true);
     try {
       if (widget.entry != null && widget.index != null) {
-        // For updates, pass both the files and existing photos separately
+        // For updates, use the new method signature
         await ref
             .read(entriesNotifierProvider.notifier)
             .updateEntry(
               widget.index!,
-              entry,
-              images: files.isNotEmpty ? files : null,
-              existingPhotos: _existingPhotos,
+              entryData,
+              newImages: newFiles.isNotEmpty ? newFiles : null,
+              keptPhotos: _keptPhotos.isNotEmpty ? _keptPhotos : null,
             );
         if (mounted) {
           Navigator.of(context).pop();
@@ -236,7 +204,7 @@ class _AddEntryScreenState extends ConsumerState<AddEntryScreen> {
       } else {
         await ref
             .read(entriesNotifierProvider.notifier)
-            .addEntry(entry, images: files);
+            .addEntry(entryData, images: newFiles);
         if (mounted) {
           Navigator.of(context).pop();
           ScaffoldMessenger.of(context).showSnackBar(
@@ -591,7 +559,12 @@ class _AddEntryScreenState extends ConsumerState<AddEntryScreen> {
                                   ),
                                   onPressed: () {
                                     setState(() {
+                                      final removedPhoto = _displayPhotos[index];
                                       _displayPhotos.removeAt(index);
+                                      // If it was a new image, remove from tracking
+                                      if (_newImagePaths.contains(removedPhoto)) {
+                                        _newImagePaths.remove(removedPhoto);
+                                      }
                                     });
                                   },
                                 ),
